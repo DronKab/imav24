@@ -62,4 +62,4 @@ ros2 launch imav24 simulador.launch.py
 
 This will run px4_driver node and UXRCE agent. Let it run in the background.
 
-5. You can run your node afterwards with *ros2 run imav24 <node_name>* in another terminal.
+5. Take off and change to Offboard mode. You can run your node afterwards with *ros2 run imav24 <node_name>* in another terminal.
