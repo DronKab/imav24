@@ -1,4 +1,6 @@
 from setuptools import find_packages, setup
+import os 
+from glob import glob
 
 package_name = 'imav24'
 
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name), glob('launch/*.launch.py'))
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -17,7 +20,6 @@ setup(
     maintainer_email='perrusquia832@gmail.com',
     description='TODO: Package description',
     license='MIT',
-    tests_require=['pytest'],
     entry_points={
         'console_scripts': [
             'px4_driver = imav24.px4_driver:main'
