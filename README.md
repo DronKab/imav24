@@ -19,9 +19,9 @@ sudo ldconfig /usr/local/lib/
  
  Other installations steps and more details are described *[here](https://docs.px4.io/main/en/middleware/uxrce_dds.html)*.
 
- ## How to run
+## Installation
 
- 1. Create a new workspace folder if you haven't done it before.
+ 1. Create a new workspace folder.
 
  ```sh
  cd
@@ -54,7 +54,9 @@ echo "source ~/imav/install/local_setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
-4. Start your SITL/Gazebo, check *[this repo](https://github.com/DronKab/imav24_sim.git)* for that. Then, run the launch file with :
+ ## How to run
+
+1. Start your SITL/Gazebo, check *[this repo](https://github.com/DronKab/imav24_sim.git)* for that. Then, run the launch file with :
 
 ```sh
 ros2 launch imav24 simulador.launch.py 
@@ -62,4 +64,4 @@ ros2 launch imav24 simulador.launch.py
 
 This will run px4_driver node and UXRCE agent. Let it run in the background.
 
-5. Take off and change to Offboard mode. You can run your node afterwards with *ros2 run imav24 <node_name>* in another terminal.
+2. Take off and change to Offboard mode. You can run your node afterwards with *ros2 run imav24 <node_name>* in another terminal.
