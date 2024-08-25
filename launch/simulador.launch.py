@@ -12,5 +12,14 @@ def generate_launch_description():
             package="imav24",
             executable="px4_driver",
             output="screen"
+        ),
+        Node(
+            package="aruco_opencv",
+            executable="aruco_tracker_autostart",
+            output="screen",
+            parameters=[{
+                "cam_base_topic":"/pi_camera",
+                "marker_dict":"5X5_1000"
+            }]
         )
     ])

@@ -4,6 +4,8 @@ Indoor and outdoor ROS2 nodes for IMAV24.
 
 ## Pre-requisites
 
+ - ROS2 Humble installed. Steps can be found *[here](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)*.
+
  - MicroXRCE-DDS Client installed, to do so you can run : 
  
  ```sh
@@ -18,6 +20,14 @@ sudo ldconfig /usr/local/lib/
  ```
  
  Other installations steps and more details are described *[here](https://docs.px4.io/main/en/middleware/uxrce_dds.html)*.
+
+  - Aruco-OpenCV ROS2 Package :
+
+  ```sh
+  sudo apt install ros-humble-aruco-opencv
+  ```
+
+  Package *[page](https://index.ros.org/p/aruco_opencv/)* on ROS Index is provided as reference.
 
 ## Installation
 
@@ -62,6 +72,6 @@ source ~/.bashrc
 ros2 launch imav24 simulador.launch.py 
 ```
 
-This will run px4_driver node and UXRCE agent. Let it run in the background.
+This will run px4_driver node, Aruco detection node, and UXRCE agent. Let it run in the background.
 
 2. Take off and change to Offboard mode. You can run your node afterwards with *ros2 run imav24 <node_name>* in another terminal.
