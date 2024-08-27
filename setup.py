@@ -22,7 +22,8 @@ setup(
     license='MIT',
     entry_points={
         'console_scripts': [
-            'px4_driver = imav24.px4_driver:main'
+            "px4_driver = imav24.px4_driver:main",
+            "line_follower = imav24.line_follower:main"
         ],
     },
 )
