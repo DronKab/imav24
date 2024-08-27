@@ -1,13 +1,11 @@
 import rclpy
 import math
 import numpy
-import time
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
 from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand, VehicleLocalPosition, VehicleStatus, VehicleAttitude
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, Float32, Bool
 from geometry_msgs.msg import PoseStamped, Twist, Pose
-from geometry_msgs.msg import Quaternion
 
 from geometry_msgs.msg import TransformStamped
 from tf2_ros import TransformBroadcaster
@@ -27,13 +25,19 @@ class PX4Driver(Node):
             depth=1
         )
 
+        # Parameters
+        self.declare_parameter("takeoff_height", 1.0)
+        self.declare_parameter("do_height_control", True)
+
+        self.takeoff_height = self.get_parameter("takeoff_height").get_parameter_value().double_value
+        self.do_height_control = self.get_parameter("do_height_control").get_parameter_value().bool_value
+
         # Initialize variables
+        self.height_target = self.takeoff_height
         self.takeoff_counter = 0
         self.control_counter = 0
         self.arm_timeout = 3
-        self.takeoff_height = 1.0
         self.taking_off = False
-        self.start_height = 0
 
         self.node_rate = 10
         self.node_dt = 1/self.node_rate
@@ -60,6 +64,8 @@ class PX4Driver(Node):
         self.land_subscriber = self.create_subscription(Empty, "/px4_driver/land", self.land, 10)
         self.velocity_subscriber = self.create_subscription(Twist, "/px4_driver/cmd_vel", self.cmd_vel, 10)
         self.position_subscriber = self.create_subscription(Pose, "/px4_driver/cmd_pos", self.cmd_pos, 10)
+        self.height_subscriber = self.create_subscription(Float32, "/px4_driver/target_height", self.change_height_target, 10)
+        self.do_height_control_subscriber = self.create_subscription(Bool, "/px4_driver/do_height_control", self.change_do_height_control, 10)
 
         # Frame Broadcaster from reference
         self.tf_broadcaster = TransformBroadcaster(self)
@@ -211,7 +217,7 @@ class PX4Driver(Node):
             return
 
         # TODO: check for valid local position
-        self.get_logger().info("Taking Off")
+        self.get_logger().info(f"Taking Off to {self.takeoff_height} meters, height reference to {self.height_target + self.takeoff_position.z} meters")
         self.arm()
 
         # Save takeoff position
@@ -221,24 +227,43 @@ class PX4Driver(Node):
         self.takeoff_position.heading = self.vehicle_local_position.heading
 
         # Update target setpoint to be take off height + current height
+        self.height_target = self.takeoff_position.z - self.takeoff_height
         self.current_setpoint = TrajectorySetpoint()
         self.current_setpoint.position[0] = self.takeoff_position.x
         self.current_setpoint.position[1] = self.takeoff_position.y
-        self.current_setpoint.position[2] = self.takeoff_position.z - self.takeoff_height
+        self.current_setpoint.position[2] = self.height_target
         self.current_setpoint.yaw = self.takeoff_position.heading
 
         self.taking_off = True
+    
+    # Change altitude reference respect to takeoffposition
+    def change_height_target(self, msg):
+        self.get_logger().info(f"Changed height reference to {msg.data} meters")
+        self.height_target = self.takeoff_position.z - msg.data
+
+    # Enable/disable height control
+    def change_do_height_control(self, msg):
+        if msg.data:
+            self.get_logger().info(f"Disabled height control")
+        else:
+            self.get_logger().info(f"Enabled height control, reference to {self.height_target + self.takeoff_position.z} meters")
+
+        self.do_height_control = msg.data
     
     # Update setpoint to perform position control when Pose received, relative to World
     def cmd_pos(self, msg):
         if self.taking_off:
             self.get_logger().info("Vehicle taking off! Will ignore this msg")
             return
+
+        if self.do_height_control:
+            self.do_height_control = False
         
         # Change position setpoint
         self.current_setpoint.position[0] = msg.position.x
         self.current_setpoint.position[1] = msg.position.y
         self.current_setpoint.position[2] = msg.position.z
+
         _, _, yaw = self.euler_from_quaternion(msg.orientation)
         self.current_setpoint.yaw = yaw
 
@@ -259,8 +284,10 @@ class PX4Driver(Node):
         # Set velocity setpoint
         self.current_setpoint.position[0] = float("nan")
         self.current_setpoint.position[1] = float("nan")
-        self.current_setpoint.position[2] = float("nan")
         self.current_setpoint.yaw = float("nan")
+
+        if not self.do_height_control:
+            self.current_setpoint.position[2] = float("nan")
         
         self.current_setpoint.velocity[0] = rotated_twist.linear.x
         self.current_setpoint.velocity[1] = -rotated_twist.linear.y
@@ -317,8 +344,12 @@ class PX4Driver(Node):
         self.current_setpoint = TrajectorySetpoint()
         self.current_setpoint.position[0] = float("nan")
         self.current_setpoint.position[1] = float("nan")
-        self.current_setpoint.position[2] = float("nan")
         self.current_setpoint.yaw = float("nan")
+
+        if self.do_height_control:
+            self.current_setpoint.position[2] = self.height_target
+        else:
+            self.current_setpoint.position[2] = float("nan")
 
 # Definition of main function to create and run the node
 def main(args=None):

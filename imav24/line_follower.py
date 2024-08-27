@@ -22,7 +22,7 @@ class LineFollower(Node):
         self.p_yaw = 0.1
 
         # Subscriptions
-        self.image_sub = self.create_subscription(Image, '/pi_camera', self.image_callback, 10)
+        self.image_sub = self.create_subscription(Image, '/pi_camera/image_raw', self.image_callback, 10)
 
         # Publishers
         self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
