@@ -7,19 +7,162 @@ from cv_bridge import CvBridge
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
 
+class ControlsPID_Indoor():
+    def __init__(self):
+
+        self.node_rate = 10
+        self.node_dt = 1 / self.node_rate
+
+        self.signYaw = 0
+        self.signPitch = 0
+        self.signRoll = 0
+
+        Kp_Yaw = 0.08
+        Ki_Yaw = 0.0002
+        Kd_Yaw = 0.010
+
+        Kp_Pitch = 0.000
+        Ki_Pitch = 0.000
+        Kd_Pitch = 0.000
+
+        Kp_Roll = 0.010
+        Ki_Roll = 0.000
+        Kd_Roll = 0.000
+
+        Ts = 0.1
+
+        self.A_Yaw = Kp_Yaw + Kd_Yaw / Ts + (Ki_Yaw * Ts) / 2
+        self.B_Yaw = (Ki_Yaw * Ts) / 2 - Kp_Yaw - (2 * Kd_Yaw) / Ts
+        self.C_Yaw = Kd_Yaw / Ts
+
+        self.A_Pitch = Kp_Pitch + Kd_Pitch / Ts + (Ki_Pitch * Ts) / 2
+        self.B_Pitch = (Ki_Pitch * Ts) / 2 - Kp_Pitch - (2 * Kd_Pitch) / Ts
+        self.C_Pitch = Kd_Pitch / Ts 
+
+        self.A_Roll = Kp_Roll + Kd_Roll / Ts + (Ki_Roll * Ts) / 2
+        self.B_Roll = (Ki_Roll * Ts) / 2 - Kp_Roll - (2 * Kd_Roll) / Ts
+        self.C_Roll = Kd_Roll / Ts
+
+        self.U_yaw = [0.0, 0.0]
+        self.Error_yaw = [0.0, 0.0, 0.0]
+
+        self.U_pitch = [0.0, 0.0]
+        self.Error_pitch = [0.0, 0.0, 0.0]
+
+        self.U_roll = [0.0, 0.0]
+        self.Error_roll = [0.0, 0.0, 0.0]
+
+
+    def ControlPID_yaw(self, reference, Error_Actual_Total, High_limit, Low_limit):
+
+        print(f"Error actual YAW: {Error_Actual_Total}")
+
+        if Error_Actual_Total - reference >= 0.0:
+            self.signYaw = 1.0
+        
+        else:
+            self.signYaw = -1.0
+
+        self.Error_yaw[0] = abs(Error_Actual_Total - reference)
+
+        self.U_yaw[0] = self.U_yaw[1] + self.A_Yaw * self.Error_yaw[0] + self.B_Yaw * self.Error_yaw[1] + self.C_Yaw * self.Error_yaw[2]    
+        
+        if  self.U_yaw[0] > High_limit:
+            self.U_yaw[0] = High_limit
+        
+        elif self.U_yaw[0] < Low_limit:
+            self.U_yaw[0] = Low_limit
+
+        inputControl = self.signYaw * self.U_yaw[0] 
+
+        self.U_yaw[1] = self.U_yaw[0]
+
+        self.Error_yaw[2] = self.Error_yaw[1]
+        self.Error_yaw[1] = self.Error_yaw[0]
+
+        return inputControl
+    
+
+    def ControlPID_pitch(self, reference, Error_Actual_Total, High_limit, Low_limit):
+
+        #print(f"Error actual Total: {Error_Actual_Total}")
+
+        if Error_Actual_Total - reference >= 0.0:
+            self.signPitch = 1.0
+        
+        else:
+            self.signPitch = -1.0
+
+        self.Error_pitch[0] = abs(Error_Actual_Total - reference)
+
+        self.U_pitch[0] = self.U_pitch[1] + self.A_Pitch * self.Error_pitch[0] + self.B_Pitch * self.Error_pitch[1] + self.C_Pitch * self.Error_pitch[2]
+
+        if self.U_pitch[0] > High_limit:
+            self.U_pitch[0] = High_limit
+
+        elif self.U_pitch[0] < Low_limit:
+            self.U_pitch[0] = Low_limit
+
+        inputControl = self.signPitch * self.U_pitch[0]
+
+        self.U_pitch[1] = self.U_pitch[0]
+
+        self.Error_pitch[2] = self.Error_pitch[1]
+        self.Error_pitch[1] = self.Error_pitch[0]
+
+        return inputControl
+
+    
+    def ControlPID_roll(self, reference, Error_Actual_Total, High_limit, Low_limit):
+        
+        #print(f"Error actual Total: {Error_Actual_Total}")
+
+        if Error_Actual_Total - reference >= 0.0:
+            self.signRoll = 1.0
+        
+        else:
+            self.signRoll = -1.0
+
+        self.Error_roll[0] = abs(Error_Actual_Total - reference)
+
+        self.U_roll[0] = self.U_roll[1] + self.A_Roll * self.Error_roll[0] + self.B_Roll * self.Error_roll[1] + self.C_Roll * self.Error_roll[2]
+
+        if self.U_roll[0] > High_limit:
+            self.U_roll[0] = High_limit
+
+        elif self.U_roll[0] < Low_limit:
+            self.U_roll[0] = Low_limit
+
+        inputControl = self.signRoll * self.U_roll[0]
+
+        self.U_roll[1] = self.U_roll[0]
+
+        self.Error_roll[2] = self.Error_roll[1]
+        self.Error_roll[1] = self.Error_roll[0]
+
+        return inputControl
+
 class LineFollower(Node):
     def __init__(self):
         super().__init__('line_follower')
         self.get_logger().info("Line Follower started.")
+
+        # Aruco Detection
+        aruco_dict = cv2.aruco.Dictionary_get(cv2.aruco.DICT_5X5_250)
+        parameters = cv2.aruco.DetectorParameters_create()
 
         # Node Variables 
         self.colorBajo1 = np.array([110, 255, 255], np.uint8)
         self.colorAlto1 = np.array([130, 255, 255], np.uint8)
         self.cv_bridge = CvBridge()
 
+        self.vels = Twist()
+
         self.angle_error = 0
         self.lateral_error = 0
         self.p_yaw = 0.1
+
+        self.Control = ControlsPID_Indoor()
 
         # Subscriptions
         self.image_sub = self.create_subscription(Image, '/pi_camera/image_raw', self.image_callback, 10)
@@ -33,31 +176,98 @@ class LineFollower(Node):
         self.heartbeat_timer = self.create_timer( self.ts, self.yaw_control)
 
     def image_callback(self, msg):
+
+        # Initialize variables to track the minimum angle error and the corresponding contour
+        #min_angle_error = float('inf')
+        #min_angle_contour = None
+
+        # Initialize variables to track the minimum center Y position and the corresponding contour
+        min_centery_line = float('inf')
+        max_angle_error = 30.0
+
         # Line Detection
         frame = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
         height_scr, width_scr, _ = frame.shape
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+        speed_coefficient = 1 / width_scr
         frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
         kernel = np.ones((5, 5), np.uint8) 
-        frame = cv2.dilate(frame, kernel, iterations=15) 
+        frame = cv2.dilate(frame, kernel, iterations=0) 
 
         debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
         contours, hierarchy = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
+        # Mostrar la imagen de la máscara y la imagen dilatada
+        #cv2.imshow('Mask', frame_mask)
+        #cv2.imshow('Dilated Mask', frame_mask_dilated)
+
         if len(contours)>0:
-            max_contour = max(contours, key=cv2.contourArea)
-            ((centerx_line, centery_line),(height, width),angle) = cv2.minAreaRect(max_contour)
-            box = cv2.boxPoints(((centerx_line, centery_line),(height, width),angle))
-            box = np.int0(box)
-            if height > width:
-                angle -= 90
+            for contour in contours:
+                ((centerx_line, centery_line), (height, width), angle) = cv2.minAreaRect(contour)
+                box = cv2.boxPoints(((centerx_line, centery_line), (height, width), angle))
+                box = np.intp(box)
+                
+                if height > width:
+                    angle -= 90
+                
+                # Calculate angle error
+                self.angle_error = angle
+                self.lateral_error = width_scr / 2 - centerx_line
+                
+                # Check if this is the smallest angle error encountered
+                """if abs(self.angle_error) < abs(min_angle_error):
+                    min_angle_error = self.angle_error
+                    min_angle_contour = contour
+                    min_angle_box = box
+                    min_centerx_line = centerx_line
+                    min_centery_line = centery_line
+                    min_lateral_error = self.lateral_error"""
+                
+                #Check if this is the smallest center Y line position
+                if centery_line < min_centery_line:
+                    min_angle_error = self.angle_error
+                    min_centery_line = centery_line
+                    min_angle_contour = contour
+                    min_angle_box = box
+                    min_centerx_line = centerx_line
+                    min_lateral_error = self.lateral_error
+                
+            # If a contour with minimum angle error was found, process it
+            if min_angle_contour is not None:
+                # Highlight the contour with the minimum angle error
+                cv2.drawContours(debug_img, [min_angle_contour], -1, (255, 0, 0), 5)
+                cv2.drawContours(debug_img, [min_angle_box], 0, (0, 0, 255), 2)
 
-            self.angle_error = angle
-            self.lateral_error = width_scr/2 - centerx_line
+                # Annotate the image with the error values of the selected contour
+                """cv2.putText(debug_img, f'Min AngleError: {min_angle_error}', 
+                            (int(min_centerx_line), int(min_centery_line) - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)"""
+                
+                cv2.putText(debug_img, f'AngleError: {min_angle_error}', 
+                            (int(min_centerx_line), int(min_centery_line) - 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
 
-            cv2.drawContours(debug_img, max_contour, -1, (255, 0, 0), 5)
-            cv2.drawContours(debug_img,[box],0,(0,0,255),2)
+                cv2.putText(debug_img, f'LateralError: {min_lateral_error}', 
+                            (int(min_centerx_line), int(min_centery_line) + 10), 
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
+
+                # Use the lateral error and angle error for control (e.g., PID control)
+                if self.angle_error >= max_angle_error or self.angle_error <= ((-1.0)*max_angle_error):
+                    self.vels.linear.x = 0.1
+                    self.vels.linear.y = 0.0
+                else:
+                    self.vels.linear.x = 0.5
+                    self.vels.linear.y = float(self.Control.ControlPID_roll(0, self.lateral_error, 1, 0))
+
+                print(f"Front Velocity: {self.vels.linear.x}")
+                self.vels.angular.z = float(self.Control.ControlPID_yaw(0, self.angle_error, 3, 0))
+                print(f"Velocity Roll: {self.vels.linear.y}         Angular velocity: {self.vels.angular.z}")
+                self.vel_pub.publish(self.vels)
+            else:
+                self.angle_error = 0
+                self.lateral_error = 0    
+    
         else:
             self.angle_error = 0
             self.lateral_error = 0
@@ -67,6 +277,10 @@ class LineFollower(Node):
 
         debug_msg = self.cv_bridge.cv2_to_imgmsg(debug_img, "bgr8")
         self.debug_pub.publish(debug_msg)
+
+        # Mostrar la imagen de detección
+        cv2.imshow('Detection', debug_img)
+        cv2.waitKey(1)
 
     def yaw_control(self):
         msg = Twist()
