@@ -6,6 +6,12 @@ Indoor and outdoor ROS2 nodes for IMAV24.
 
  - ROS2 Humble installed. Steps can be found *[here](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)*.
 
+ - Last version of setuptools working without warning on Ros2 Humble : 
+
+```sh
+pip install setuptools==58.2.0
+```
+
  - MicroXRCE-DDS Client installed, to do so you can run : 
  
  ```sh
@@ -60,7 +66,7 @@ colcon build
 You can add the new package to your .bashrc after the build if it didn't fail. This will auto-source the package on every new terminal you open.
 
 ```sh
-echo "source ~/imav/install/local_setup.bash" >> ~/.bashrc
+echo "source ~/imav_ws/install/local_setup.bash" >> ~/.bashrc
 source ~/.bashrc
 ```
 
