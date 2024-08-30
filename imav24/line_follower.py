@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 from rclpy.node import Node
 from cv_bridge import CvBridge
+import time
 
 from sensor_msgs.msg import Image
 from geometry_msgs.msg import Twist
@@ -17,9 +18,9 @@ class ControlsPID_Indoor():
         self.signPitch = 0
         self.signRoll = 0
 
-        Kp_Yaw = 0.08
-        Ki_Yaw = 0.0002
-        Kd_Yaw = 0.010
+        Kp_Yaw = 0.001
+        Ki_Yaw = 0.0001
+        Kd_Yaw = 0.005
 
         Kp_Pitch = 0.000
         Ki_Pitch = 0.000
@@ -29,7 +30,7 @@ class ControlsPID_Indoor():
         Ki_Roll = 0.000
         Kd_Roll = 0.000
 
-        Ts = 0.1
+        Ts = 0.07
 
         self.A_Yaw = Kp_Yaw + Kd_Yaw / Ts + (Ki_Yaw * Ts) / 2
         self.B_Yaw = (Ki_Yaw * Ts) / 2 - Kp_Yaw - (2 * Kd_Yaw) / Ts
@@ -58,10 +59,10 @@ class ControlsPID_Indoor():
         print(f"Error actual YAW: {Error_Actual_Total}")
 
         if Error_Actual_Total - reference >= 0.0:
-            self.signYaw = 1.0
+            self.signYaw = -1.0
         
         else:
-            self.signYaw = -1.0
+            self.signYaw = 1.0
 
         self.Error_yaw[0] = abs(Error_Actual_Total - reference)
 
@@ -172,14 +173,20 @@ class LineFollower(Node):
         self.debug_pub = self.create_publisher(Image, "/line_follower/debug", 10)
 
         # Timer to publish control
-        self.ts = 0.1
+        self.ts = 0.07
         self.heartbeat_timer = self.create_timer( self.ts, self.yaw_control)
 
     def image_callback(self, msg):
 
+        start_time = time.time()
+
         # Initialize variables to track the minimum angle error and the corresponding contour
         #min_angle_error = float('inf')
         #min_angle_contour = None
+
+        # Initialize min_angle_error and min_lateral_error to ensure they're always defined
+        min_angle_error = 0
+        min_lateral_error = 0
 
         # Initialize variables to track the minimum center Y position and the corresponding contour
         min_centery_line = float('inf')
@@ -189,11 +196,14 @@ class LineFollower(Node):
         frame = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
         height_scr, width_scr, _ = frame.shape
 
+        center_camera_x = width_scr*0.5
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
         speed_coefficient = 1 / width_scr
         frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
+        mask = frame
         kernel = np.ones((5, 5), np.uint8) 
         frame = cv2.dilate(frame, kernel, iterations=0) 
+        mask = frame
 
         debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
         contours, hierarchy = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -207,6 +217,8 @@ class LineFollower(Node):
                 ((centerx_line, centery_line), (height, width), angle) = cv2.minAreaRect(contour)
                 box = cv2.boxPoints(((centerx_line, centery_line), (height, width), angle))
                 box = np.intp(box)
+
+                cv2.putText(debug_img, f'AngleNoMod : {angle}', (20,60), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
                 
                 if height > width:
                     angle -= 90
@@ -235,9 +247,49 @@ class LineFollower(Node):
                 
             # If a contour with minimum angle error was found, process it
             if min_angle_contour is not None:
+
+                # Draw lines for frame division
+                cv2.line(debug_img, (int(center_camera_x - 20), 0), (int(center_camera_x - 20), height_scr), (0, 255, 0), 2)
+                cv2.line(debug_img, (int(center_camera_x + 20), 0), (int(center_camera_x + 20), height_scr), (0, 255, 0), 2)
+
+                # Calculate area of the contour in each division
+                mask_contour = np.zeros_like(mask)
+                cv2.drawContours(mask_contour, [min_angle_contour], -1, 255, thickness=cv2.FILLED)
+                area_total = cv2.countNonZero(mask_contour)
+                area_left = cv2.countNonZero(mask_contour[:, :int(center_camera_x - 20)])
+                area_right = cv2.countNonZero(mask_contour[:, int(center_camera_x + 20):])
+
+                # Mostrar áreas en pantalla
+                cv2.putText(debug_img, f'Area Left: {area_left}', (20, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+                cv2.putText(debug_img, f'Area Right: {area_right}', (20, 140), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+                cv2.putText(debug_img, f'Total Area: {area_total}', (20, 160), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+
+
                 # Highlight the contour with the minimum angle error
                 cv2.drawContours(debug_img, [min_angle_contour], -1, (255, 0, 0), 5)
                 cv2.drawContours(debug_img, [min_angle_box], 0, (0, 0, 255), 2)
+
+                # Use the lateral error and angle error for control (e.g., PID control)
+                    #Condition for turn around
+
+                if min_angle_error >= max_angle_error or min_angle_error <= ((-1.0)*max_angle_error):
+                    print("BIG ANGLE")
+                    if area_right > area_left:
+                        print("TURN RIGHT")
+                        cv2.putText(debug_img, 'Turn Right', (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+                        min_angle_error = 0
+                        self.vels.angular.z = 1.0
+                    else:
+                        print("TURN LEFT")
+                        cv2.putText(debug_img, 'Turn Left', (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+                        min_angle_error = 0
+                        self.vels.angular.z = -1.0
+
+                    self.vels.linear.x = 0.3
+                    self.vels.linear.y = 0.0
+                else:
+                    self.vels.linear.x = 0.5
+                    self.vels.linear.y = float(self.Control.ControlPID_roll(0, min_lateral_error, 1, 0))
 
                 # Annotate the image with the error values of the selected contour
                 """cv2.putText(debug_img, f'Min AngleError: {min_angle_error}', 
@@ -252,28 +304,20 @@ class LineFollower(Node):
                             (int(min_centerx_line), int(min_centery_line) + 10), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 0), 1)
 
-                # Use the lateral error and angle error for control (e.g., PID control)
-                if self.angle_error >= max_angle_error or self.angle_error <= ((-1.0)*max_angle_error):
-                    self.vels.linear.x = 0.1
-                    self.vels.linear.y = 0.0
-                else:
-                    self.vels.linear.x = 0.5
-                    self.vels.linear.y = float(self.Control.ControlPID_roll(0, self.lateral_error, 1, 0))
-
                 print(f"Front Velocity: {self.vels.linear.x}")
-                self.vels.angular.z = float(self.Control.ControlPID_yaw(0, self.angle_error, 3, 0))
+                self.vels.angular.z = float(self.Control.ControlPID_yaw(0, min_angle_error, 1, 0))
                 print(f"Velocity Roll: {self.vels.linear.y}         Angular velocity: {self.vels.angular.z}")
                 self.vel_pub.publish(self.vels)
             else:
-                self.angle_error = 0
-                self.lateral_error = 0    
+                min_angle_error = 0
+                min_lateral_error = 0    
     
         else:
-            self.angle_error = 0
-            self.lateral_error = 0
+            self.angle_error = min_angle_error
+            self.lateral_error = min_lateral_error
 
-        cv2.putText(debug_img, f'AngleError : {self.angle_error}', (20,20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
-        cv2.putText(debug_img, f'LateralError : {self.lateral_error}', (20,40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+        cv2.putText(debug_img, f'AngleError : {min_angle_error}', (20,20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
+        cv2.putText(debug_img, f'LateralError : {min_lateral_error}', (20,40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
 
         debug_msg = self.cv_bridge.cv2_to_imgmsg(debug_img, "bgr8")
         self.debug_pub.publish(debug_msg)
@@ -281,6 +325,10 @@ class LineFollower(Node):
         # Mostrar la imagen de detección
         cv2.imshow('Detection', debug_img)
         cv2.waitKey(1)
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"Tiempo de ejecución del callback: {execution_time:.4f} segundos")
 
     def yaw_control(self):
         msg = Twist()
