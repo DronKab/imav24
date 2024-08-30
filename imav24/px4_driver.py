@@ -31,7 +31,7 @@ class PX4Driver(Node):
         self.takeoff_counter = 0
         self.control_counter = 0
         self.arm_timeout = 3
-        self.takeoff_height = 1.0
+        self.takeoff_height = 1.8
         self.taking_off = False
         self.start_height = 0
 
