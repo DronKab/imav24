@@ -25,7 +25,8 @@ setup(
             "px4_driver = imav24.px4_driver:main",
             "line_follower = imav24.line_follower:main",
             "camera_pub = imav24.camera_pub:main",
-            "aruco_control = imav24.aruco_control:main"
+            "aruco_control = imav24.aruco_control:main",
+            "joystick_control = imav24.joystick_control:main"
         ],
     },
 )
