@@ -7,7 +7,7 @@ from px4_msgs.msg import OffboardControlMode, TrajectorySetpoint, VehicleCommand
 from std_msgs.msg import Empty, Float32, Bool
 from geometry_msgs.msg import PoseStamped, Twist, Pose
 
-from geometry_msgs.msg import TransformStamped
+from geometry_msgs.msg import TransformStamped, Quaternion, Vector3
 from tf2_ros import TransformBroadcaster
 
 # Currently only position trayectories, and passtrough velocities and setpoints are meant to be supported, might change in a future
@@ -111,21 +111,33 @@ class PX4Driver(Node):
 
         return roll, pitch, yaw
     
-    # Transform Twist message from world to drone using TransforStamped (consider leveled drone, only linear part)
-    def transform_twist(self, transform_st, twist):
-        _, _, yaw = self.euler_from_quaternion(transform_st.transform.rotation)
+    # Multiply 2 quaternions q1 x q2
+    def hammilton(self, q1, q2):
+        product= Quaternion()
 
-        linear = numpy.array([twist.linear.x, twist.linear.y])
-        rotation_matrix = numpy.array([
-            [numpy.cos(yaw), -numpy.sin(yaw)],
-            [numpy.sin(yaw), numpy.cos(yaw)]
-        ])
-        rotated_linear = numpy.dot(rotation_matrix, linear)
+        w1, x1, y1, z1 = q1.w, q1.x, q1.y, q1.z
+        w2, x2, y2, z2 = q2.w, q2.x, q2.y, q2.z
 
-        twist.linear.x = rotated_linear[0]
-        twist.linear.y = rotated_linear[1]
-        return twist
+        product.w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
+        product.x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
+        product.y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
+        product.z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
 
+        return product
+    
+    # Rotate Vector by using v* = qvq*
+    def rotate_vector(self, q, v):
+        conj = Quaternion()
+        conj.w, conj.x, conj.y, conj.z = q.w, -q.x, -q.y, -q.z
+
+        pure = Quaternion()
+        pure.w, pure.x, pure.y, pure.z = 0.0, v.x, v.y, v.z
+
+        rotated = self.hammilton(self.hammilton(q, pure), conj)
+
+        self.get_logger().info(f"Converted:\nX = {v.x} -> {rotated.x}\nY = {v.y} -> {rotated.y}")
+        return rotated
+    
     # Update local position when a new message is published
     def vehicle_local_position_update(self, msg):
         self.vehicle_local_position = msg
@@ -244,9 +256,9 @@ class PX4Driver(Node):
     # Enable/disable height control
     def change_do_height_control(self, msg):
         if msg.data:
-            self.get_logger().info(f"Disabled height control")
-        else:
             self.get_logger().info(f"Enabled height control, reference to {self.height_target + self.takeoff_position.z} meters")
+        else:
+            self.get_logger().info(f"Disabled height control")
 
         self.do_height_control = msg.data
     
@@ -275,11 +287,14 @@ class PX4Driver(Node):
     # Update setpoint to perform velocity control when Twist received, relative to Drone
     def cmd_vel(self, msg):
         if self.taking_off:
-            self.get_logger().info("Vehicle taking off! Will ignore this msg")
+            self.get_logger().info("Vehicle taking off! Will ignore this msg!")
             return
         
         # Rotate Twist msg
-        rotated_twist = self.transform_twist(self.last_tf, msg)
+        self.get_logger().info(f"---\nReceived:\nX = {msg.linear.x}\nY = {msg.linear.y}")
+        v = Vector3()
+        v.x, v.y, v.z = msg.linear.x, -msg.linear.y, 0.0
+        rotated_twist = self.rotate_vector(self.last_tf.transform.rotation, v)
 
         # Set velocity setpoint
         self.current_setpoint.position[0] = float("nan")
@@ -289,8 +304,8 @@ class PX4Driver(Node):
         if not self.do_height_control:
             self.current_setpoint.position[2] = float("nan")
         
-        self.current_setpoint.velocity[0] = rotated_twist.linear.x
-        self.current_setpoint.velocity[1] = -rotated_twist.linear.y
+        self.current_setpoint.velocity[0] = rotated_twist.x
+        self.current_setpoint.velocity[1] = rotated_twist.y
         self.current_setpoint.velocity[2] = -msg.linear.z
         self.current_setpoint.yawspeed = msg.angular.z
 
