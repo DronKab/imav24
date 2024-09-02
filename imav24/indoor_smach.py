@@ -13,11 +13,13 @@ class IndoorSmach(Node):
         self.get_logger().info("State Machine node started")
 
         # Create state machine
-        sq = smach.Sequence(outcomes=["failed", "succeeded"])
+        sq = smach.Sequence(outcomes=["succeeded", "aborted", "preempted"], connector_outcome="succeeded")
 
         # Add States
         with sq:
-            smach.Sequence.add("STATE1", state1.)
+            smach.Sequence.add("STATE1", state1.NodeState())
+            smach.Sequence.add("STATE2", state2.NodeState())
+            smach.Sequence.add("STATE1-2", state1.NodeState())
 
         # Start server for state machine visualization
         server = smach_ros.IntrospectionServer('indoor_smach_server', sq, '/SM_ROOT')

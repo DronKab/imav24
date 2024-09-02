@@ -26,7 +26,10 @@ setup(
             "line_follower = imav24.line_follower:main",
             "camera_pub = imav24.camera_pub:main",
             "aruco_control = imav24.aruco_control:main",
-            "joystick_control = imav24.joystick_control:main"
+            "joystick_control = imav24.joystick_control:main",
+            "state1 = imav24.state1:main",
+            "state2 = imav24.state2:main",
+            "indoor_smach = imav24.indoor_smach:main"
         ],
     },
 )
