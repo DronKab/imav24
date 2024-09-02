@@ -17,7 +17,8 @@ class IndoorSmach(Node):
 
         # Add States
         with sq:
-            smach.Sequence.add("STATE1", state1.)
+            smach.Sequence.add("STATE1", state1())
+            smach.Sequence.add("STATE2", state2())
 
         # Start server for state machine visualization
         server = smach_ros.IntrospectionServer('indoor_smach_server', sq, '/SM_ROOT')

@@ -1,7 +1,8 @@
 import rclpy
+import numpy
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
-from std_msgs.msg import Empty
+from std_msgs.msg import Empty, Bool
 from sensor_msgs.msg import Image
 import cv2 as cv
 from cv_bridge import CvBridge
@@ -12,17 +13,20 @@ class ArucoControl(Node):
         super().__init__("aruco_control")
         self.get_logger().info("Started Aruco Control ...")
 
+        self.declare_parameter("do_height_control", False)
+        self.do_height_control = self.get_parameter("do_height_control").get_parameter_value().bool_value
+
         self.max_vel = 4.0
         self.max_vel_z = -0.1
 
-        ################    NODE VARS    ##################
+        # Node variables 
         self.aruco_id = 0
 
         self.aruco_sub = self.create_subscription(ArucoDetection, "/aruco_detections", self.aruco_callback, 10)
 
         self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
-        self.takeoff_pub = self.create_publisher(Empty, "/px4_driver/takeoff", 10)
         self.land_pub = self.create_publisher(Empty, "/px4_driver/land", 10)
+        self.do_height_control_pub = self.create_publisher(Bool, "/px4_driver/do_height_control", 10)
 
         # self.node_rate = 15.625 # 1/64ms
         # self.ts = 1 / self.node_rate
@@ -30,7 +34,7 @@ class ArucoControl(Node):
 
         self.heartbeat_timer = self.create_timer(self.ts, self.control)
 
-        ################    X VARS   ###################
+        # X variables #
         self.declare_parameter("px_gain", 0.9)
         self.px_gain = self.get_parameter("px_gain").get_parameter_value().double_value
         self.get_logger().info(f"PX Gain : {self.px_gain}")
@@ -47,12 +51,12 @@ class ArucoControl(Node):
         self.nx_filter = self.get_parameter("nx_filter").get_parameter_value().double_value
         self.get_logger().info(f"NX Coefficient : {self.nx_filter}")
 
-        self.x_error = -0.10
+        self.x_error = 0.10
         self.x_error_1 = 0.0
         self.x_output = 0.0
         self.x_output_1 = 0.0
 
-        ################    Y VARS    ###################
+        # Y variables #
         self.declare_parameter("py_gain", 0.9)
         self.py_gain = self.get_parameter("py_gain").get_parameter_value().double_value
         self.get_logger().info(f"PY Gain : {self.py_gain}")
@@ -74,7 +78,7 @@ class ArucoControl(Node):
         self.y_output = 0.0
         self.y_output_1 = 0.0
 
-        ################    Z VARS    ###################
+        # Z variables #
         self.declare_parameter("pz_gain", 0.6)
         self.pz_gain = self.get_parameter("pz_gain").get_parameter_value().double_value
         self.get_logger().info(f"PZ Gain : {self.pz_gain}")
@@ -107,13 +111,13 @@ class ArucoControl(Node):
                     break
 
             if msg.markers[aruco_index].marker_id == 301:
-                self.x_error = msg.markers[aruco_index].pose.position.y
-                self.y_error = msg.markers[aruco_index].pose.position.x
+                self.x_error = -msg.markers[aruco_index].pose.position.y
+                self.y_error = -msg.markers[aruco_index].pose.position.x
                 self.z_error = -msg.markers[aruco_index].pose.position.z
                 self.aruco_id = msg.markers[aruco_index].marker_id
 
             else:
-                self.x_error = -0.10
+                self.x_error = 0.10
                 self.y_error = 0.0
                 self.z_error = 0.0
                 self.aruco_id = 0
@@ -124,11 +128,15 @@ class ArucoControl(Node):
         msg = Twist()
         self.get_logger().info(f"id Aruco = {self.aruco_id}")
 
+        do_height_control_msg = Bool()
+        do_height_control_msg.data = self.do_height_control
+        self.do_height_control_pub.publish(do_height_control_msg)
+
         # Crear el mensaje de velocidad
         self.get_logger().info("Entering control")
         self.get_logger().info(f"Erores: x={self.x_error}, y={self.y_error},  z={self.z_error}")
 
-        # Control PID en x
+        # Control PD en x
         px_action = self.x_error * self.px_gain
         # ix_action = self.x_output_1 + self.x_error * self.ix_gain * self.ts
         dx_action = self.x_output_1 * (self.nx_filter * self.dx_gain * (self.x_error - self.x_error_1)) / (1 + self.nx_filter * self.ts)
@@ -137,7 +145,7 @@ class ArucoControl(Node):
         self.x_error_1 = self.x_error * 1.0
         self.x_output_1 = self.x_output * 1.0
         
-        # Control PID en Y
+        # Control PD en Y
         py_action = self.y_error * self.py_gain
         # iy_action = self.y_output_1 + self.y_error * self.iy_gain * self.ts
         dy_action = self.y_output_1 * (self.ny_filter * self.dy_gain * (self.y_error - self.y_error_1)) / (1 + self.ny_filter * self.ts)
@@ -146,7 +154,7 @@ class ArucoControl(Node):
         self.y_error_1 = self.y_error * 1.0
         self.y_output_1 = self.y_output * 1.0
 
-        # Control PID en Z
+        # Control PD en Z
         pz_action = self.z_error * self.pz_gain
         # iz_action = self.z_output_1 + self.z_error * self.iz_gain * self.ts
         dz_action = self.z_output_1 * (self.nz_filter * self.dz_gain * (self.z_error - self.z_error_1)) / (1 + self.nz_filter * self.ts)
@@ -175,7 +183,6 @@ class ArucoControl(Node):
             msg.linear.y = 0.0
             msg.linear.z = 0.0
             self.get_logger().info("Vehicle is centered with Aruco marker")
-            # self.get_logger().info(f"Erores: x={self.x_error}, y={self.y_error},  z={self.z_error}")
             self.land_pub.publish(Empty())
 
         else:
