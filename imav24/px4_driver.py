@@ -125,10 +125,15 @@ class PX4Driver(Node):
 
         return product
     
-    # Rotate Vector by using v* = qvq*
-    def rotate_vector(self, q, v):
+    # Get conjugated of quaternion q (or inverse if unit quaternion)
+    def conj_quat(self, q):
         conj = Quaternion()
         conj.w, conj.x, conj.y, conj.z = q.w, -q.x, -q.y, -q.z
+        return conj
+    
+    # Rotate Vector by quaternion using v* = qvq*
+    def rotate_vector(self, q, v):
+        conj = self.conj_quat(q)
 
         pure = Quaternion()
         pure.w, pure.x, pure.y, pure.z = 0.0, v.x, v.y, v.z
@@ -291,7 +296,7 @@ class PX4Driver(Node):
             return
         
         # Rotate Twist msg
-        self.get_logger().info(f"---\nReceived:\nX = {msg.linear.x}\nY = {msg.linear.y}")
+        # self.get_logger().info(f"---\nReceived:\nX = {msg.linear.x}\nY = {msg.linear.y}")
         v = Vector3()
         v.x, v.y, v.z = msg.linear.x, -msg.linear.y, 0.0
         rotated_twist = self.rotate_vector(self.last_tf.transform.rotation, v)
