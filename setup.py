@@ -23,7 +23,9 @@ setup(
     entry_points={
         'console_scripts': [
             "px4_driver = imav24.px4_driver:main",
-            "line_follower = imav24.line_follower:main"
+            "line_follower = imav24.line_follower:main",
+            "send_command = imav24.send_command:main",
+            "go_to_waypoint = imav24.go_to_waypoint:main"
         ],
     },
 )
