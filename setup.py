@@ -29,7 +29,9 @@ setup(
             "joystick_control = imav24.joystick_control:main",
             "state1 = imav24.state1:main",
             "state2 = imav24.state2:main",
-            "indoor_smach = imav24.indoor_smach:main"
+            "indoor_smach = imav24.indoor_smach:main",
+            "send_command = imav24.send_command:main",
+            "go_to_waypoint = imav24.go_to_waypoint:main"
         ],
     },
 )
