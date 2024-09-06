@@ -14,11 +14,11 @@ from aruco_opencv_msgs.msg import ArucoDetection
 class ExitOk(Exception): pass
 class NodeState(State):
     def __init__(self):
-        State.__init__(self, outcomes=["succeeded", "aborted"])
+        State.__init__(self, outcomes=["succeeded", "aborted"], input_keys=['aruco_finish'])
     def execute(self, userdata):
         try:
 
-            node = LineFollower()
+            node = LineFollower(userdata.aruco_finish)
 
             rclpy.spin(node)
         except ExitOk:
@@ -163,7 +163,7 @@ class ControlsPID_Indoor():
         return inputControl
 
 class LineFollower(Node):
-    def __init__(self):
+    def __init__(self, userdata):
         super().__init__('line_follower')
         self.get_logger().info("Line Follower started.")
 
@@ -181,7 +181,7 @@ class LineFollower(Node):
 
         self.Control = ControlsPID_Indoor()
 
-        self.aruco_finish = 105
+        self.aruco_fin = userdata.aruco_finish
         self.aruco_flag = 0
 
         # Subscriptions
@@ -198,7 +198,7 @@ class LineFollower(Node):
     def aruco_callback(self, msg):
         if len(msg.markers) > 0:
             for i in range (0, len(msg.markers)):
-                if msg.markers[i].marker_id == self.aruco_finish:
+                if msg.markers[i].marker_id == self.aruco_fin:
                     self.aruco_flag = 1
                     break
 

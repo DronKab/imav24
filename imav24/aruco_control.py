@@ -1,6 +1,7 @@
 import rclpy
 import numpy
 import math
+from smach import State
 from rclpy.node import Node
 from geometry_msgs.msg import Twist, Quaternion
 from std_msgs.msg import Empty, Bool
@@ -9,10 +10,25 @@ import cv2 as cv
 from cv_bridge import CvBridge
 from aruco_opencv_msgs.msg import ArucoDetection
 
-class ArucoControl(Node):
+class ExitOk(Exception): pass
+class NodeState(State):
     def __init__(self):
+        State.__init__(self, outcomes=["succeeded", "aborted"], input_keys=['aruco_go'])
+    def execute(self, userdata):
+        try:
+            node = ArucoControl(userdata.aruco_go)
+            rclpy.spin(node)
+        except ExitOk:
+            node.destroy_node()
+            return "succeeded"
+        except:
+            return "aborted"
+
+class ArucoControl(Node):
+    def __init__(self, userdata):
         super().__init__("aruco_control")
         self.get_logger().info("Started Aruco Control ...")
+
 
         self.max_vel = 4.0
         self.max_vel_z = -0.1
@@ -31,7 +47,8 @@ class ArucoControl(Node):
         # self.aruco_goal = 301 # second platform
         # self.aruco_goal = 302 # third platform
         # self.aruco_goal = 400 # cone collection
-        self.aruco_goal = 405 # cone placement 
+        # self.aruco_goal = 405 # cone placement 
+        self.aruco_goal = userdata.aruco_go
 
         self.roll = 0 # en grados 
         self.roll = math.radians(self.roll)
@@ -55,36 +72,24 @@ class ArucoControl(Node):
             self.y_distance = 0.0
 
             # X variables
-            self.declare_parameter("px_gain", 0.9)
-            self.px_gain = self.get_parameter("px_gain").get_parameter_value().double_value
-            self.declare_parameter("dx_gain", 0.1)
-            self.dx_gain = self.get_parameter("dx_gain").get_parameter_value().double_value
-            self.declare_parameter("nx_filter", 0.1)
-            self.nx_filter = self.get_parameter("nx_filter").get_parameter_value().double_value
+            self.px_gain = 0.9
+            self.dx_gain = 0.1
+            self.nx_filter = 0.1
 
             # Y variables
-            self.declare_parameter("py_gain", 0.9)
-            self.py_gain = self.get_parameter("py_gain").get_parameter_value().double_value
-            self.declare_parameter("dy_gain", 0.1)
-            self.dy_gain = self.get_parameter("dy_gain").get_parameter_value().double_value
-            self.declare_parameter("ny_filter", 0.1)
-            self.ny_filter = self.get_parameter("ny_filter").get_parameter_value().double_value
+            self.py_gain = 0.9
+            self.dy_gain = 0.1
+            self.ny_filter = 0.1
 
             # Z variables
-            self.declare_parameter("pz_gain", 0.6)
-            self.pz_gain = self.get_parameter("pz_gain").get_parameter_value().double_value
-            self.declare_parameter("dz_gain", 0.1)
-            self.dz_gain = self.get_parameter("dz_gain").get_parameter_value().double_value
-            self.declare_parameter("nz_filter", 0.1)
-            self.nz_filter = self.get_parameter("nz_filter").get_parameter_value().double_value
+            self.pz_gain = 0.6
+            self.dz_gain = 0.1
+            self.nz_filter = 0.1
 
             # Yaw variables
-            self.declare_parameter("pyaw_gain", 0.9)
-            self.pyaw_gain = self.get_parameter("pyaw_gain").get_parameter_value().double_value
-            self.declare_parameter("dyaw_gain", 0.1)
-            self.dyaw_gain = self.get_parameter("dyaw_gain").get_parameter_value().double_value
-            self.declare_parameter("nyaw_filter", 0.1)
-            self.nyaw_filter = self.get_parameter("nyaw_filter").get_parameter_value().double_value
+            self.pyaw_gain = 0.9
+            self.dyaw_gain = 0.1
+            self.nyaw_filter = 0.1
 
         else:
             if self.aruco_goal == 400:
@@ -98,36 +103,24 @@ class ArucoControl(Node):
                 self.y_distance = 0.0
 
             # X variables
-            self.declare_parameter("px_gain", 0.5)
-            self.px_gain = self.get_parameter("px_gain").get_parameter_value().double_value
-            self.declare_parameter("dx_gain", 0.06)
-            self.dx_gain = self.get_parameter("dx_gain").get_parameter_value().double_value
-            self.declare_parameter("nx_filter", 0.1)
-            self.nx_filter = self.get_parameter("nx_filter").get_parameter_value().double_value
+            self.px_gain = 0.5
+            self.dx_gain = 0.06
+            self.nx_filter = 0.1
 
             # Y variables 
-            self.declare_parameter("py_gain", 0.5)
-            self.py_gain = self.get_parameter("py_gain").get_parameter_value().double_value
-            self.declare_parameter("dy_gain", 0.06)
-            self.dy_gain = self.get_parameter("dy_gain").get_parameter_value().double_value
-            self.declare_parameter("ny_filter", 0.1)
-            self.ny_filter = self.get_parameter("ny_filter").get_parameter_value().double_value
+            self.py_gain = 0.5
+            self.dy_gain = 0.06
+            self.ny_filter = 0.1
 
             # Z variables #
-            self.declare_parameter("pz_gain", 0.3)
-            self.pz_gain = self.get_parameter("pz_gain").get_parameter_value().double_value
-            self.declare_parameter("dz_gain", 0.03)
-            self.dz_gain = self.get_parameter("dz_gain").get_parameter_value().double_value
-            self.declare_parameter("nz_filter", 0.1)
-            self.nz_filter = self.get_parameter("nz_filter").get_parameter_value().double_value
+            self.pz_gain = 0.3
+            self.dz_gain = 0.03
+            self.nz_filter = 0.1
 
             # Yaw variables
-            self.declare_parameter("pyaw_gain", 0.5)
-            self.pyaw_gain = self.get_parameter("pyaw_gain").get_parameter_value().double_value
-            self.declare_parameter("dyaw_gain", 0.06)
-            self.dyaw_gain = self.get_parameter("dyaw_gain").get_parameter_value().double_value
-            self.declare_parameter("nyaw_filter", 0.1)
-            self.nyaw_filter = self.get_parameter("nyaw_filter").get_parameter_value().double_value
+            self.pyaw_gain = 0.5
+            self.dyaw_gain = 0.06
+            self.nyaw_filter = 0.1
         
         self.get_logger().info(f"PX Gain : {self.px_gain}")
         self.get_logger().info(f"DX Gain : {self.dx_gain}")
@@ -301,6 +294,7 @@ class ArucoControl(Node):
                 self.land_pub.publish(Empty())
                 
             self.get_logger().info("Vehicle is centered with Aruco marker")
+            raise ExitOk
             
         else:
             msg.linear.x = self.x_output
