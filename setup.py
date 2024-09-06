@@ -31,7 +31,8 @@ setup(
             "state2 = imav24.state2:main",
             "indoor_smach = imav24.indoor_smach:main",
             "send_command = imav24.send_command:main",
-            "go_to_waypoint = imav24.go_to_waypoint:main"
+            "go_to_waypoint = imav24.go_to_waypoint:main",
+            "SetPhoto = imav24.SetPhoto:main"
         ],
     },
 )

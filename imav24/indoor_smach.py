@@ -5,6 +5,7 @@ from imav24 import state1
 from imav24 import state2
 from imav24 import aruco_control
 from imav24 import line_follower
+from imav24 import SetPhoto
 
 from std_msgs.msg import Empty, Float32
 
@@ -28,8 +29,8 @@ class IndoorSmach(Node):
             smach.Sequence.add("INITIAL TAKEOFF", smach.CBState(self.takeoff, outcomes=["succeeded"]))
             smach.Sequence.add("STATE LINE_105", line_follower.NodeState(105))
             smach.Sequence.add("HEIGHT", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.5], outcomes=["succeeded"]))
-            # estado foto
-            # cb altura ventana
+            smach.Sequence.add("TAKE PHOTO", SetPhoto.NodeState())
+            smach.Sequence.add("HEIGHT WINDOW", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1], outcomes=["succeeded"]))
             # estado aruco control yaw
             # smach.Sequence.add("STATE LINE_200", line_follower.NodeState(200))
             # smach.Sequence.add("STATE LINE_205", line_follower.NodeState(205))
@@ -37,7 +38,7 @@ class IndoorSmach(Node):
             smach.Sequence.add("STATE ARUCO_300", aruco_control.NodeState(300))
             # smach.Sequence.add("STATE ARUCO_301", aruco_control.NodeState(301, 0.0, 0.0, 90))
             # smach.Sequence.add("STATE ARUCO_302", aruco_control.NodeState(302, 0.0, 0.0, 90))
-            # cd sube para ver linea
+            smach.Sequence.add("HEIGHT FOR LINE", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.5], outcomes=["succeeded"]))
             smach.Sequence.add("STATE LINE_400", line_follower.NodeState(400))
             smach.Sequence.add("STATE ARUCO_400", aruco_control.NodeState(400))
             # nodo toma el cono
@@ -56,12 +57,12 @@ class IndoorSmach(Node):
         outcome = sq.execute()
         self.get_logger().info(f"State Machine ended with outcome {outcome}")
 
-    def takeoff(self, params):
+    def takeoff(self, userdata):
         self.get_logger().info("Publishing takeoff msg")
         self.takeoff_pub.publish(Empty())
         return "succeeded"
     
-    def control_height(self, params, altura):
+    def control_height(self, userdata, altura):
         msg = Float32()
         msg.data = altura
         self.get_logger().info(f"Changed height target to {msg.data}")

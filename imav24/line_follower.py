@@ -38,9 +38,9 @@ class ControlsPID_Indoor():
         self.signPitch = 0
         self.signRoll = 0
 
-        Kp_Yaw = 0.100
+        Kp_Yaw = 0.050
         Ki_Yaw = 0.001
-        Kd_Yaw = 0.050
+        Kd_Yaw = 0.007
 
         Kp_Pitch = 0.000
         Ki_Pitch = 0.000

@@ -5,11 +5,13 @@ import math
 import time
 import numpy as np
 import cv2 as cv
+from smach import State
 
 from rclpy.node import Node
 
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
+from geometry_msgs. msg import Twist
 
 from cv_bridge import CvBridge
 
@@ -21,6 +23,24 @@ upper_red1 = np.array([10, 255, 255])
 lower_red2 = np.array([170, 50, 50])
 upper_red2 = np.array([180, 255, 255])
 
+# Code for making the node runnable on Smach
+class ExitOk(Exception): pass
+class NodeState(State):
+    def __init__(self):
+        State.__init__(self, outcomes=["succeeded", "aborted"])
+        self.id = id
+    def execute(self, userdata):
+        try:
+
+            node = TakePhoto()
+
+            rclpy.spin(node)
+        except ExitOk:
+            node.destroy_node()
+            return "succeeded"
+        except:
+            return "aborted"
+
 class ControlsPID_Indoor():
     def __init__(self):
 
@@ -31,19 +51,23 @@ class ControlsPID_Indoor():
         self.signPitch = 0
         self.signRoll = 0
 
-        Kp_Yaw = 0.08
-        Ki_Yaw = 0.0002
-        Kd_Yaw = 0.010
+        Kp_Yaw = 0.003
+        Ki_Yaw = 0.0000
+        Kd_Yaw = 0.000
 
         Kp_Pitch = 0.000
         Ki_Pitch = 0.000
         Kd_Pitch = 0.000
 
-        Kp_Roll = 0.010
+        Kp_Roll = 0.000
         Ki_Roll = 0.000
         Kd_Roll = 0.000
 
-        Ts = 0.1
+        Kp_Altitude = 0.001
+        Ki_Altitude = 0.000
+        Kd_Altitude = 0.000
+
+        Ts = 0.07
 
         self.A_Yaw = Kp_Yaw + Kd_Yaw / Ts + (Ki_Yaw * Ts) / 2
         self.B_Yaw = (Ki_Yaw * Ts) / 2 - Kp_Yaw - (2 * Kd_Yaw) / Ts
@@ -57,6 +81,10 @@ class ControlsPID_Indoor():
         self.B_Roll = (Ki_Roll * Ts) / 2 - Kp_Roll - (2 * Kd_Roll) / Ts
         self.C_Roll = Kd_Roll / Ts
 
+        self.A_Altitude = Kp_Altitude + Kd_Altitude / Ts + (Ki_Altitude * Ts) / 2
+        self.B_Altitude = (Ki_Altitude * Ts) / 2 - Kp_Altitude - (2 * Kd_Altitude) / Ts
+        self.C_Altitude = Kd_Altitude / Ts
+
         self.U_yaw = [0.0, 0.0]
         self.Error_yaw = [0.0, 0.0, 0.0]
 
@@ -65,6 +93,9 @@ class ControlsPID_Indoor():
 
         self.U_roll = [0.0, 0.0]
         self.Error_roll = [0.0, 0.0, 0.0]
+
+        self.U_altitude = [0.0, 0.0]
+        self.Error_altitude = [0.0, 0.0, 0.0]
 
 
     def ControlPID_yaw(self, reference, Error_Actual_Total, High_limit, Low_limit):
@@ -155,6 +186,35 @@ class ControlsPID_Indoor():
         self.Error_roll[1] = self.Error_roll[0]
 
         return inputControl
+    
+    def ControlPID_altitude(self, reference, Error_Actual_Total, High_limit, Low_limit):
+        
+        #print(f"Error actual Total: {Error_Actual_Total}")
+
+        if Error_Actual_Total - reference >= 0.0:
+            self.signAltitude = 1.0
+        
+        else:
+            self.signAltitude = -1.0
+
+        self.Error_altitude[0] = abs(Error_Actual_Total - reference)
+
+        self.U_altitude[0] = self.U_altitude[1] + self.A_Altitude * self.Error_altitude[0] + self.B_Altitude * self.Error_altitude[1] + self.C_Altitude * self.Error_altitude[2]
+
+        if self.U_altitude[0] > High_limit:
+            self.U_altitude[0] = High_limit
+
+        elif self.U_altitude[0] < Low_limit:
+            self.U_altitude[0] = Low_limit
+
+        inputControl = self.signAltitude * self.U_altitude[0]
+
+        self.U_altitude[1] = self.U_altitude[0]
+
+        self.Error_altitude[2] = self.Error_altitude[1]
+        self.Error_altitude[1] = self.Error_altitude[0]
+
+        return inputControl
 
 
 class TakePhoto(Node):
@@ -162,15 +222,30 @@ class TakePhoto(Node):
         super().__init__('Photo')
 
         self.Bridge = CvBridge()
-        self.subscription = self.create_subscription(Image, '/oak/rgb/image_raw', self.listener_callback, 10)
 
         self.buffer_size = 5
         self.x_buffer = []
         self.y_buffer = []
 
-        self.error_threshold = 40
+        self.errorX = 0
+        self.errorY = 0
+
+        self.error_threshold = 60
 
         self.image_taken = False
+
+        self.vels = Twist()
+        self.Control = ControlsPID_Indoor()
+
+        #Subscriptions
+        self.subscription = self.create_subscription(Image, '/camera/image_raw', self.listener_callback, 10)
+
+        #Publishers
+        self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
+
+        # Timer to publish control
+        self.ts = 0.07
+        self.heartbeat_timer = self.create_timer( self.ts, self.control)
 
     def moving_average(self, value, buffer, buffer_size):
         if len(buffer) >= buffer_size:
@@ -208,8 +283,8 @@ class TakePhoto(Node):
             contour = max(contours, key=cv.contourArea)
             epsilon = 0.02 * cv.arcLength(contour, True)
             approx = cv.approxPolyDP(contour, epsilon, True)
-
-            if len(approx) == 4:
+            area = cv.contourArea(approx)
+            if len(approx) == 4 and area > 20000:
                 cv.drawContours(frame_draw, [approx], -1, (0, 255, 0), 2)
 
                 M = cv.moments(contour)
@@ -233,6 +308,9 @@ class TakePhoto(Node):
                 f"Error Y: {error[1]}"
             ]
 
+            self.errorX = error[0]
+            self.errorY = error[1]
+
             for i, line in enumerate(error_text):
                 cv.putText(frame_draw, line, (10, 30 + i * 30), cv.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 150), 2, cv.LINE_AA)
 
@@ -251,6 +329,7 @@ class TakePhoto(Node):
                 self.get_logger().info(f"Imagen guardada como {filename}")
 
                 self.image_taken = True
+                raise ExitOk
 
                 cv.destroyAllWindows()
 
@@ -285,6 +364,10 @@ class TakePhoto(Node):
         cv.imshow("Composite Image", final_image)
         cv.waitKey(1)
 
+    def control(self):
+        self.vels.angular.z = float(self.Control.ControlPID_yaw(0, self.errorX, 1, 0))
+        self.vels.linear.z = float(self.Control.ControlPID_altitude(0, self.errorY, 1, 0))
+        self.vel_pub.publish(self.vels)
 
 def main(args=None):
     rclpy.init(args=args)
@@ -296,4 +379,3 @@ def main(args=None):
 
 if __name__ == '__main__':
     main()
-
