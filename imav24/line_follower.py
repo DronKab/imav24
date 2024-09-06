@@ -13,12 +13,13 @@ from aruco_opencv_msgs.msg import ArucoDetection
 # Code for making the node runnable on Smach
 class ExitOk(Exception): pass
 class NodeState(State):
-    def __init__(self):
-        State.__init__(self, outcomes=["succeeded", "aborted"], input_keys=['aruco_finish'])
+    def __init__(self, id=105):
+        State.__init__(self, outcomes=["succeeded", "aborted"])
+        self.id = id
     def execute(self, userdata):
         try:
 
-            node = LineFollower(userdata.aruco_finish)
+            node = LineFollower(id_aruco=self.id)
 
             rclpy.spin(node)
         except ExitOk:
@@ -163,7 +164,7 @@ class ControlsPID_Indoor():
         return inputControl
 
 class LineFollower(Node):
-    def __init__(self, userdata):
+    def __init__(self, id_aruco=105):
         super().__init__('line_follower')
         self.get_logger().info("Line Follower started.")
 
@@ -181,7 +182,7 @@ class LineFollower(Node):
 
         self.Control = ControlsPID_Indoor()
 
-        self.aruco_fin = userdata.aruco_finish
+        self.aruco_fin = id_aruco
         self.aruco_flag = 0
 
         # Subscriptions

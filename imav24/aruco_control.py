@@ -12,11 +12,13 @@ from aruco_opencv_msgs.msg import ArucoDetection
 
 class ExitOk(Exception): pass
 class NodeState(State):
-    def __init__(self):
+    def __init__(self, id=105):
         State.__init__(self, outcomes=["succeeded", "aborted"], input_keys=['aruco_go'])
+        self.id = id
     def execute(self, userdata):
         try:
-            node = ArucoControl(userdata.aruco_go)
+            node = ArucoControl(id=self.id)
+
             rclpy.spin(node)
         except ExitOk:
             node.destroy_node()
@@ -25,7 +27,7 @@ class NodeState(State):
             return "aborted"
 
 class ArucoControl(Node):
-    def __init__(self, userdata):
+    def __init__(self, id=105):
         super().__init__("aruco_control")
         self.get_logger().info("Started Aruco Control ...")
 
@@ -48,7 +50,7 @@ class ArucoControl(Node):
         # self.aruco_goal = 302 # third platform
         # self.aruco_goal = 400 # cone collection
         # self.aruco_goal = 405 # cone placement 
-        self.aruco_goal = userdata.aruco_go
+        self.aruco_goal = id
 
         self.roll = 0 # en grados 
         self.roll = math.radians(self.roll)
