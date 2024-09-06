@@ -4,6 +4,7 @@ import smach_ros
 
 from imav24 import state1
 from imav24 import state2
+from imav24 import line_follower
 
 from rclpy.node import Node
 
@@ -17,7 +18,7 @@ class IndoorSmach(Node):
 
         # Add States
         with sq:
-            smach.Sequence.add("STATE1", state1.NodeState())
+            smach.Sequence.add("STATE1", line_follower.NodeState())
             smach.Sequence.add("STATE2", state2.NodeState())
             smach.Sequence.add("STATE1-2", state1.NodeState())
 
