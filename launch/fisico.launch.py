@@ -19,12 +19,16 @@ def generate_launch_description():
             output="screen",
             parameters=[{
                 "cam_base_topic":"/pi_camera/image_raw",
-                "marker_dict":"5X5_1000"
+                "marker_dict":"5X5_1000",
+                "image_sub_compressed":"true"
             }]
         ),
         Node(
-            package="imav24",
-            executable="camera_pub",
-            output="screen"
+            package="v4l2_camera",
+            executable="v4l2_camera_node",
+            output="screen",
+            remappings=[
+                ("__ns","/pi_camera")
+            ]
         )
     ])
