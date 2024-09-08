@@ -12,52 +12,61 @@ from aruco_opencv_msgs.msg import ArucoDetection
 
 class ExitOk(Exception): pass
 class NodeState(State):
-    def __init__(self, id=105):
-        State.__init__(self, outcomes=["succeeded", "aborted"], input_keys=['aruco_go'])
+    def __init__(self, id=105, dx=0.0, dy=0.0, yaw_tg=180, flg_lnd=1):
+        State.__init__(self, outcomes=["succeeded", "aborted"])
         self.id = id
+        self.dx = dx
+        self.dy = dy
+        self.yaw_tg = yaw_tg
+        self.flg_ln = flg_lnd
     def execute(self, userdata):
         try:
-            node = ArucoControl(id=self.id)
-
+            node = ArucoControl(id_gl=self.id, dst_x=self.dx, dst_y=self.dy, yaw_trg=self.yaw_tg, flg_land=self.flg_ln)
             rclpy.spin(node)
         except ExitOk:
             node.destroy_node()
             return "succeeded"
-        except:
+        except Exception as e:
+            print(e)
             return "aborted"
 
 class ArucoControl(Node):
-    def __init__(self, id=105):
+    def __init__(self, id_gl=105, dst_x=0.0, dst_y=0.0, yaw_trg=180, flg_land=1):
         super().__init__("aruco_control")
         self.get_logger().info("Started Aruco Control ...")
 
-
         self.max_vel = 4.0
         self.max_vel_z = -0.1
-        self.max_vel_yaw = 0.2
-        self.aruco_id = 0
+        self.max_vel_yaw = 10.0
 
         self.last_known_x = None
         self.last_known_y = None
         self.last_known_z = None
-        # self.last_known_yaw = None
+        self.last_known_yaw = None
         self.aruco_visible = False
 
         # Received parameters
-        # self.aruco_goal = 100 # start
-        # self.aruco_goal = 300 # first platform
-        # self.aruco_goal = 301 # second platform
-        # self.aruco_goal = 302 # third platform
-        # self.aruco_goal = 400 # cone collection
-        # self.aruco_goal = 405 # cone placement 
-        self.aruco_goal = id
+        self.aruco_goal = id_gl
+        self.x_distance = dst_x
+        self.y_distance = dst_y
+        self.yaw = yaw_trg
+        self.flag_land = flg_land
 
-        self.roll = 0 # en grados 
-        self.roll = math.radians(self.roll)
-        self.pitch = 0 # en grados 
-        self.pitch = math.radians(self.pitch)
-        self.yaw = -90 # en grados 
-        self.yaw = math.radians(self.yaw)
+        self.lim_sup_x = 0.1
+        self.lim_sup_y = 0.1
+        self.lim_sup_yaw = 10
+
+        if self.aruco_goal == 300 or self.aruco_goal == 301 or self.aruco_goal == 302: # or self.aruco_goal == 400:
+            self.lim_z = 0.5
+            self.lim_inf_x = 0.05
+            self.lim_inf_y = 0.05
+            self.lim_inf_yaw = 5
+
+        else:
+            self.lim_z = 0.3
+            self.lim_inf_x = 0.01
+            self.lim_inf_y = 0.01
+            self.lim_inf_yaw = 2
 
         self.aruco_sub = self.create_subscription(ArucoDetection, "/aruco_detections", self.aruco_callback, 10)
 
@@ -65,64 +74,33 @@ class ArucoControl(Node):
         self.land_pub = self.create_publisher(Empty, "/px4_driver/land", 10)
         self.do_height_control_pub = self.create_publisher(Bool, "/px4_driver/do_height_control", 10)
 
-        self.q2 = self.quaternion_from_euler(self.roll, self.pitch, self.yaw)
-        self.get_logger().info(f"q2 : {self.q2}")
-
-        if (self.aruco_goal == 300 or self.aruco_goal == 301 or self.aruco_goal == 302 or self.aruco_goal == 100):
+        if self.flag_land == 1:
             self.declare_parameter("do_height_control", False)
-            self.x_distance = 0.0
-            self.y_distance = 0.0
-
-            # X variables
-            self.px_gain = 0.9
-            self.dx_gain = 0.1
-            self.nx_filter = 0.1
-
-            # Y variables
-            self.py_gain = 0.9
-            self.dy_gain = 0.1
-            self.ny_filter = 0.1
-
-            # Z variables
-            self.pz_gain = 0.6
-            self.dz_gain = 0.1
-            self.nz_filter = 0.1
-
-            # Yaw variables
-            self.pyaw_gain = 0.9
-            self.dyaw_gain = 0.1
-            self.nyaw_filter = 0.1
 
         else:
-            if self.aruco_goal == 400:
-                self.declare_parameter("do_height_control", False)
-                self.x_distance = -0.4
-                self.y_distance = 0.0
+            self.declare_parameter("do_height_control", True)
+        
+        # X variables
+        self.px_gain = 0.9
+        self.dx_gain = 0.1
+        self.nx_filter = 0.1
 
-            else:
-                self.declare_parameter("do_height_control", True)
-                self.x_distance = 0.0
-                self.y_distance = 0.0
+        # Y variables
+        self.py_gain = 0.9
+        self.dy_gain = 0.1
+        self.ny_filter = 0.1
 
-            # X variables
-            self.px_gain = 0.5
-            self.dx_gain = 0.06
-            self.nx_filter = 0.1
+        # Z variables
+        self.pz_gain = 0.6
+        self.dz_gain = 0.1
+        self.nz_filter = 0.1
 
-            # Y variables 
-            self.py_gain = 0.5
-            self.dy_gain = 0.06
-            self.ny_filter = 0.1
-
-            # Z variables #
-            self.pz_gain = 0.3
-            self.dz_gain = 0.03
-            self.nz_filter = 0.1
-
-            # Yaw variables
-            self.pyaw_gain = 0.5
-            self.dyaw_gain = 0.06
-            self.nyaw_filter = 0.1
+        # Yaw variables
+        if self.aruco_goal == 400:
+            self.pyaw_gain = 0.005
+        self.pyaw_gain = 0.01
+        # self.dyaw_gain = 0.00
+        # self.nyaw_filter = 0.0
         
         self.get_logger().info(f"PX Gain : {self.px_gain}")
         self.get_logger().info(f"DX Gain : {self.dx_gain}")
@@ -134,8 +112,8 @@ class ArucoControl(Node):
         self.get_logger().info(f"DZ Gain : {self.dz_gain}")
         self.get_logger().info(f"NZ Coefficient : {self.nz_filter}")
         self.get_logger().info(f"PYaw Gain : {self.pyaw_gain}")
-        self.get_logger().info(f"DYaw Gain : {self.dyaw_gain}")
-        self.get_logger().info(f"NYaw Coefficient : {self.nyaw_filter}")
+        # self.get_logger().info(f"DYaw Gain : {self.dyaw_gain}")
+        # self.get_logger().info(f"NYaw Coefficient : {self.nyaw_filter}")
         
         self.q1 = Quaternion()
         self.x_error = 0.10
@@ -166,20 +144,46 @@ class ArucoControl(Node):
         if len(msg.markers) > 0: 
             for i in range(0, len(msg.markers)):
                 if msg.markers[i].marker_id == self.aruco_goal:
-                    self.aruco_id = msg.markers[i].marker_id
                     aruco_index = i
+                    self.get_logger().info(f"Aruco ID: {msg.markers[i].marker_id}")
                     break
 
             if msg.markers[aruco_index].marker_id == self.aruco_goal:
-                self.x_error = -msg.markers[aruco_index].pose.position.y + self.x_distance
-                self.y_error = -msg.markers[aruco_index].pose.position.x + self.y_distance
-                self.z_error = -msg.markers[aruco_index].pose.position.z
                 self.aruco_id = msg.markers[aruco_index].marker_id
                 self.q1 = msg.markers[aruco_index].pose.orientation
+                _, _, angle_aruco = self.euler_from_quaternion(self.q1)
+                angle_aruco = math.degrees(angle_aruco)
+
+                if math.isnan(angle_aruco):
+                    self.yaw_error = self.last_known_yaw
+                else:
+                    self.yaw_error = angle_aruco - self.yaw
+
+                if math.isnan(msg.markers[aruco_index].pose.position.y):
+                    self.x_error = self.last_known_x
+                else:
+                    self.x_error = -msg.markers[aruco_index].pose.position.y + self.x_distance
+                
+                if math.isnan(msg.markers[aruco_index].pose.position.x):
+                    self.y_error = self.last_known_y
+                else:
+                    self.y_error = -msg.markers[aruco_index].pose.position.x + self.y_distance
+                
+                if math.isnan(msg.markers[aruco_index].pose.position.z):
+                    self.z_error = self.last_known_z
+                else:
+                    self.z_error = -msg.markers[aruco_index].pose.position.z
+                
+                if abs(self.yaw_error) > 180:
+                    if self.yaw_error < 0:
+                        self.yaw_error = self.yaw_error + 360 
+                    else:    
+                        self.yaw_error = self.yaw_error - 360
 
                 self.last_known_x = self.x_error
                 self.last_known_y = self.y_error
                 self.last_known_z = self.z_error
+                self.last_known_yaw = self.yaw_error
                 self.aruco_visible = True 
 
             else:
@@ -191,25 +195,17 @@ class ArucoControl(Node):
 
     def control(self):
         msg = Twist()
-        self.get_logger().info(f"id Aruco = {self.aruco_id}")
-
-        # calculos para control de yaw
-        q2_conj = self.conj_quat(self.q2)
-        q_multip = self.hammilton(self.q1, q2_conj)
-        _, _, self.yaw_error = self.euler_from_quaternion(q_multip)
-        yaw_error_deg = math.degrees(self.yaw_error)
-
         if not self.aruco_visible and self.last_known_x is not None:
-            self.x_error = self.last_known_x * 0.1
-            self.y_error = self.last_known_y * 0.1
-            self.z_error = self.last_known_z * 0.01
-            self.yaw_error = 0.0
+            self.x_error = self.last_known_x * 0.2
+            self.y_error = self.last_known_y * 0.2
+            self.z_error = self.last_known_z * 0.001
+            self.yaw_error = self.last_known_yaw 
 
         self.get_logger().info("Entering control")
-        self.get_logger().info(f"Erores: x={self.x_error}, y={self.y_error},  z={self.z_error}, yaw={yaw_error_deg}")
+        self.get_logger().info(f"Erores: x={self.x_error}, y={self.y_error},  z={self.z_error}, yaw={self.yaw_error}")
 
         # Control PD en X y Y
-        if abs(yaw_error_deg) < 5:
+        if abs(self.yaw_error) < self.lim_sup_yaw:
             px_action = self.x_error * self.px_gain
             # ix_action = self.x_output_1 + self.x_error * self.ix_gain * self.ts
             dx_action = self.x_output_1 * (self.nx_filter * self.dx_gain * (self.x_error - self.x_error_1)) / (1 + self.nx_filter * self.ts)
@@ -227,8 +223,6 @@ class ArucoControl(Node):
             self.y_output_1 = self.y_output * 1.0
 
         else:
-            self.do_height_control = True
-            self.do_height_control = self.get_parameter("do_height_control").get_parameter_value().bool_value
             self.x_error = 0.0
             self.x_output = 0.0
             self.y_error = 0.0
@@ -238,33 +232,41 @@ class ArucoControl(Node):
 
         
         # Control PD en z
-        if abs(self.x_error) < 0.1 and abs(self.y_error) < 0.1 and abs(yaw_error_deg) < 5:
-            # Control PD en Z
-            pz_action = self.z_error * self.pz_gain
-            # iz_action = self.z_output_1 + self.z_error * self.iz_gain * self.ts
-            dz_action = self.z_output_1 * (self.nz_filter * self.dz_gain * (self.z_error - self.z_error_1)) / (1 + self.nz_filter * self.ts)
-            self.z_output = float(pz_action + dz_action)
-            # self.z_output = float(pz_action + iz_action + dz_action)
-        else:
-            self.do_height_control = True
-            self.do_height_control = self.get_parameter("do_height_control").get_parameter_value().bool_value
-            self.z_error = 0.0
-            self.z_output = 0.0
+        if self.flag_land == 1:
+            if abs(self.x_error) < self.lim_sup_x and abs(self.y_error) < self.lim_sup_y and abs(self.yaw_error) < self.lim_sup_yaw:
+                # Control PD en Z
+                pz_action = self.z_error * self.pz_gain
+                # iz_action = self.z_output_1 + self.z_error * self.iz_gain * self.ts
+                dz_action = self.z_output_1 * (self.nz_filter * self.dz_gain * (self.z_error - self.z_error_1)) / (1 + self.nz_filter * self.ts)
+                self.z_output = float(pz_action + dz_action)
+                # self.z_output = float(pz_action + iz_action + dz_action)
+            else:
+                self.z_error = 0.0
+                self.z_output = 0.0
         
         self.z_error_1 = self.z_error * 1.0
         self.z_output_1 = self.z_output * 1.0
+
         do_height_control_msg = Bool()
         do_height_control_msg.data = self.do_height_control
         self.do_height_control_pub.publish(do_height_control_msg)
 
-        # Control PD en Yaw
-        pyaw_action = self.yaw_error * self.pyaw_gain
-        # iyaw_action = self.yaw_output_1 + self.yaw_error * self.iyaw_gain * self.ts
-        dyaw_action = self.yaw_output_1 * (self.nyaw_filter * self.dyaw_gain * (self.yaw_error - self.yaw_error_1)) / (1 + self.nyaw_filter * self.ts)
-        # self.yaw_output = float(pyaw_action + iyaw_action + dyaw_action)
-        self.yaw_output = float(pyaw_action + dyaw_action)
-        self.yaw_error_1 = self.yaw_error * 1.0
-        self.yaw_output_1 = self.yaw_output * 1.0
+        if abs(self.yaw_error) > self.lim_inf_yaw:
+            # Control PD en Yaw
+            pyaw_action = self.yaw_error * self.pyaw_gain
+            # iyaw_action = self.yaw_output_1 + self.yaw_error * self.iyaw_gain * self.ts
+            # dyaw_action = self.yaw_output_1 * (self.nyaw_filter * self.dyaw_gain * (self.yaw_error - self.yaw_error_1)) / (1 + self.nyaw_filter * self.ts)
+            # self.yaw_output = float(pyaw_action + iyaw_action + dyaw_action)
+            self.yaw_output = float(pyaw_action)
+            self.yaw_error_1 = self.yaw_error * 1.0
+            self.yaw_output_1 = self.yaw_output * 1.0
+        
+        else:
+            self.yaw_output = 0.0
+            self.yaw_error = 0.0
+            self.yaw_error_1 = 0.0
+            self.yaw_error_1 = 0.0
+            self.yaw_output_1 = 0.0
         
         if abs(self.x_output) > self.max_vel:
             if self.x_output > 0:
@@ -287,42 +289,34 @@ class ArucoControl(Node):
         if abs(self.z_output) > abs(self.max_vel_z):
             self.z_output = self.max_vel_z
 
-        if abs(self.x_error) <= 0.01 and abs(self.y_error) <= 0.01 and abs(self.z_error) <= 0.24 and abs(yaw_error_deg) <= 2:
-            msg.linear.x = 0.0
-            msg.linear.y = 0.0
-            msg.linear.z = 0.0
-            msg.angular.z = 0.0
-            if self.aruco_goal != 405:
+        if self.flag_land == 1:
+            if abs(self.x_error) <= self.lim_inf_x and abs(self.y_error) <= self.lim_inf_y and abs(self.z_error) <= self.lim_z and abs(self.yaw_error) <= self.lim_inf_yaw:
+                msg.linear.x = 0.0
+                msg.linear.y = 0.0
+                msg.linear.z = 0.0
+                msg.angular.z = 0.0
                 self.land_pub.publish(Empty())
-                
-            self.get_logger().info("Vehicle is centered with Aruco marker")
-            raise ExitOk
-            
+                self.get_logger().info("Vehicle is centered with Aruco marker")
+                raise ExitOk
+
         else:
-            msg.linear.x = self.x_output
-            msg.linear.y = self.y_output
-            msg.linear.z = self.z_output
-            msg.angular.z = self.yaw_output
+            if  abs(self.x_error) <= self.lim_inf_x and abs(self.y_error) <= self.lim_inf_y and abs(self.yaw_error) <= self.lim_inf_yaw:
+                msg.linear.x = 0.0
+                msg.linear.y = 0.0
+                msg.linear.z = 0.0
+                msg.angular.z = 0.0
+                self.get_logger().info("Vehicle is centered with Aruco marker")
+                raise ExitOk
+        
+        msg.linear.x = self.x_output
+        msg.linear.y = self.y_output
+        msg.linear.z = self.z_output
+        msg.angular.z = self.yaw_output
+
+        self.get_logger().info("Velocity published:")
+        self.get_logger().info(f"x={self.x_output}, y={self.y_output},  z={self.z_output}, yaw={self.yaw_output}")
                 
         self.vel_pub.publish(msg)
-
-    def conj_quat(self, q):
-        conj = Quaternion()
-        conj.w, conj.x, conj.y, conj.z = q.w, -q.x, -q.y, -q.z
-        return conj
-    
-    def hammilton(self, q1, q2):
-        product= Quaternion()
-
-        w1, x1, y1, z1 = q1.w, q1.x, q1.y, q1.z
-        w2, x2, y2, z2 = q2.w, q2.x, q2.y, q2.z
-
-        product.w = w1 * w2 - x1 * x2 - y1 * y2 - z1 * z2
-        product.x = w1 * x2 + x1 * w2 + y1 * z2 - z1 * y2
-        product.y = w1 * y2 + y1 * w2 + z1 * x2 - x1 * z2
-        product.z = w1 * z2 + z1 * w2 + x1 * y2 - y1 * x2
-
-        return product
 
     def euler_from_quaternion(self, quaternion):
         x = quaternion.x
@@ -343,23 +337,6 @@ class ArucoControl(Node):
 
         return roll, pitch, yaw
         
-    def quaternion_from_euler(self, roll=0, pitch=0, yaw=0):
-        cy = math.cos(yaw * 0.5)
-        sy = math.sin(yaw * 0.5)
-        cp = math.cos(pitch * 0.5)
-        sp = math.sin(pitch * 0.5)
-        cr = math.cos(roll * 0.5)
-        sr = math.sin(roll * 0.5)
-
-        # q = numpy.array([0.0, 0.0, 0.0, 0.0])
-        q = Quaternion()
-        q.x = cy * cp * cr + sy * sp * sr
-        q.y = cy * cp * sr - sy * sp * cr
-        q.z = sy * cp * sr + cy * sp * cr
-        q.w = sy * cp * cr - cy * sp * sr
-
-        #q = q / numpy.linalg.norm(q)
-        return q
 
 def main(args=None):
     rclpy.init(args=args)

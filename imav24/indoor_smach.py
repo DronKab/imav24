@@ -1,6 +1,7 @@
 import rclpy
 import smach
 import smach_ros
+import time 
 from imav24 import state1
 from imav24 import state2
 from imav24 import aruco_control
@@ -21,33 +22,65 @@ class IndoorSmach(Node):
         self.change_height_pub = self.create_publisher(Float32, "/px4_driver/target_height", 10)
         # Create state machine
         sq = smach.Sequence(outcomes=["succeeded", "aborted", "preempted"], connector_outcome="succeeded")
-
-        # @mach.cb_interface(input_keys=['q'], output_keys=['xyz'], outcomes=['foo'])
                            
         # Add States
         with sq:
+            # # Inicio parte 1 
             smach.Sequence.add("INITIAL TAKEOFF", smach.CBState(self.takeoff, outcomes=["succeeded"]))
+            
+            smach.Sequence.add("HEIGHT_takeoff", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[0.5], outcomes=["succeeded"]))
+            smach.Sequence.add("DELAY_height_ctrl_1", smach.CBState(self.delay, input_keys=["secs"], cb_args=[5], outcomes=["succeeded"]))
             smach.Sequence.add("STATE LINE_105", line_follower.NodeState(105))
-            smach.Sequence.add("HEIGHT", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.5], outcomes=["succeeded"]))
+            smach.Sequence.add("STATE ARUCO_105", aruco_control.NodeState(105, 0.0, 0.0, 90, 0))
+            smach.Sequence.add("HEIGHT_photo", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.5], outcomes=["succeeded"]))
             smach.Sequence.add("TAKE PHOTO", SetPhoto.NodeState())
-            smach.Sequence.add("HEIGHT WINDOW", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1], outcomes=["succeeded"]))
-            # estado aruco control yaw
-            # smach.Sequence.add("STATE LINE_200", line_follower.NodeState(200))
-            # smach.Sequence.add("STATE LINE_205", line_follower.NodeState(205))
-            # smach.Sequence.add("STATE ARUCO_300", aruco_control.NodeState(id, x, y, yaw, flag_land))
-            smach.Sequence.add("STATE ARUCO_300", aruco_control.NodeState(300))
-            # smach.Sequence.add("STATE ARUCO_301", aruco_control.NodeState(301, 0.0, 0.0, 90))
-            # smach.Sequence.add("STATE ARUCO_302", aruco_control.NodeState(302, 0.0, 0.0, 90))
-            smach.Sequence.add("HEIGHT FOR LINE", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.5], outcomes=["succeeded"]))
+            smach.Sequence.add("HEIGHT_window", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.0], outcomes=["succeeded"]))
+            smach.Sequence.add("DELAY_height_ctrl_2", smach.CBState(self.delay, input_keys=["secs"], cb_args=[8], outcomes=["succeeded"]))
+            smach.Sequence.add("STATE ARUCO_105_turn", aruco_control.NodeState(105, 0.0, 0.0, -90, 0))
+            smach.Sequence.add("STATE LINE_205", line_follower.NodeState(205))
+            smach.Sequence.add("STATE ARUCO_205", aruco_control.NodeState(205, 0.3, 0.0, -90, 0))
+            smach.Sequence.add("HEIGHT_platform", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.8], outcomes=["succeeded"]))
+            smach.Sequence.add("STATE LINE_300", line_follower.NodeState(300))
+            smach.Sequence.add("STATE ARUCO_300", aruco_control.NodeState(300, 0.0, 0.0, -90, 1))
+            # smach.Sequence.add("STATE LINE_301", line_follower.NodeState(301))
+            # smach.Sequence.add("STATE ARUCO_301", aruco_control.NodeState(301, 0.0, 0.0, -90, 1))
+            # smach.Sequence.add("STATE LINE_302", line_follower.NodeState(302))
+            # smach.Sequence.add("STATE ARUCO_302", aruco_control.NodeState(302, 0.0, 0.0, -90, 1))
+            smach.Sequence.add("HEIGHT_platform_takeoff", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[0.0], outcomes=["succeeded"]))
+            smach.Sequence.add("DELAY_land_1", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
+            
+            # # Fin parte 1
+            """
+            # # Inicio parte 2
+            smach.Sequence.add("HEIGHT_line", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[0.5], outcomes=["succeeded"]))
+            # smach.Sequence.add("PLATFORM_takeoff_1", smach.CBState(self.takeoff, outcomes=["succeeded"]))
+            # smach.Sequence.add("DELAY_takeoff_1", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
+            # smach.Sequence.add("STATE ARUCO_301", aruco_control.NodeState(301, 0.0, 0.0, -90, 0))
+            # smach.Sequence.add("STATE ARUCO_302", aruco_control.NodeState(302, 0.0, 0.0, -90, 0))
+            smach.Sequence.add("DELAY_height_ctrl_3", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
+            # smach.Sequence.add("STATE LINE_302", line_follower.NodeState(302))
+            # smach.Sequence.add("STATE ARUCO_301", aruco_control.NodeState(301, 0.2, 0.0, -90, 0))
+            # smach.Sequence.add("STATE ARUCO_302", aruco_control.NodeState(302, 0.0, 0.0, -90, 0))
             smach.Sequence.add("STATE LINE_400", line_follower.NodeState(400))
-            smach.Sequence.add("STATE ARUCO_400", aruco_control.NodeState(400))
+            smach.Sequence.add("STATE ARUCO_400", aruco_control.NodeState(400, 0.4, 0.0, 180, 1))
+            smach.Sequence.add("DELAY_pick_cone", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
             # nodo toma el cono
-            smach.Sequence.add("STATE ARUCO_405", aruco_control.NodeState(405))
+            smach.Sequence.add("CONE TAKEOFF 1", smach.CBState(self.takeoff, outcomes=["succeeded"]))
+            smach.Sequence.add("DELAY_Take_off_1", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
+            smach.Sequence.add("CONE TAKEOFF 2", smach.CBState(self.takeoff, outcomes=["succeeded"]))
+            smach.Sequence.add("DELAY_Take_off_2", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
+            # # Fin parte 2
+            
+            # # Inicio parte 3
+            smach.Sequence.add("HEIGHT_drop_cone", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[0.5], outcomes=["succeeded"]))
+            smach.Sequence.add("DELAY_height_ctrl_4", smach.CBState(self.delay, input_keys=["secs"], cb_args=[5], outcomes=["succeeded"]))
+            smach.Sequence.add("STATE LINE_405", line_follower.NodeState(405))
+            smach.Sequence.add("STATE ARUCO_405", aruco_control.NodeState(405, 0.0, 0.0, 180, 0))
+            smach.Sequence.add("DELAY_drope_cone", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
             # nodo suelta cono
             smach.Sequence.add("STATE LINE_100", line_follower.NodeState(100))
-            smach.Sequence.add("STATE2", state2.NodeState())
-            smach.Sequence.add("STATE ARUCO_100", aruco_control.NodeState(100))
-            smach.Sequence.add("STATE1-2", state1.NodeState())
+            smach.Sequence.add("STATE ARUCO_100", aruco_control.NodeState(100, 0.0, 0.0, 0, 1))
+            """
 
         # Start server for state machine visualization
         server = smach_ros.IntrospectionServer('indoor_smach_server', sq, '/SM_ROOT')
@@ -67,6 +100,11 @@ class IndoorSmach(Node):
         msg.data = altura
         self.get_logger().info(f"Changed height target to {msg.data}")
         self.change_height_pub.publish(msg)
+        return "succeeded"
+    
+    def delay(self, userdata, secs):
+        seconds = secs
+        time.sleep(seconds)
         return "succeeded"
         
 
