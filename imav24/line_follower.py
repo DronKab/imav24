@@ -387,7 +387,7 @@ class LineFollower(Node):
                     self.vel_pub.publish(self.vels)
                 else:
                     print("NO HAY CONTORNO MINIMO")
-                    cv2.putText(debug_img, 'NO HAY CONTORNO MINIMO', (width_scr/2,height_scr/2+20), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 1)
+                    cv2.putText(debug_img, 'NO HAY CONTORNO MINIMO', (int(width_scr/2),int(height_scr/2+20)), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 1)
                     self.angle_error = 0
                     self.lateral_error = 0    
         
