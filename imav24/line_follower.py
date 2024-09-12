@@ -410,7 +410,7 @@ class LineFollower(Node):
             self.debug_pub.publish(debug_msg)
 
             # Mostrar la imagen de detección
-            cv2.imshow('Detection', debug_img)
+            #cv2.imshow('Detection', debug_img)
             cv2.waitKey(1)
 
             end_time = time.time()
