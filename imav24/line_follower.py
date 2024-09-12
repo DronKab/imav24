@@ -6,7 +6,7 @@ from cv_bridge import CvBridge
 import time
 from smach import State
 
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage
 from geometry_msgs.msg import Twist
 from aruco_opencv_msgs.msg import ArucoDetection
 
@@ -203,11 +203,11 @@ class LineFollower(Node):
 
         # Subscriptions
         self.aruco_subs = self.create_subscription(ArucoDetection, "/aruco_detections", self.aruco_callback, 10)
-        self.image_sub = self.create_subscription(Image, '/pi_camera/image_raw', self.image_callback, 10)
+        self.image_sub = self.create_subscription(CompressedImage, '/pi_camera/image_raw/compressed', self.image_callback, 10)
         
         # Publishers
         self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
-        self.debug_pub = self.create_publisher(Image, "/line_follower/debug", 10)
+        self.debug_pub = self.create_publisher(CompressedImage, "/line_follower/debug", 10)
         
         # Timer to publish control
         self.ts = 0.07
@@ -406,6 +406,7 @@ class LineFollower(Node):
             cv2.putText(debug_img, f'AngleError : {min_angle_error}', (20,20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
             cv2.putText(debug_img, f'LateralError : {min_lateral_error}', (20,40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
 
+            # Image Publisher   
             debug_msg = self.cv_bridge.cv2_to_imgmsg(debug_img, "bgr8")
             self.debug_pub.publish(debug_msg)
 
