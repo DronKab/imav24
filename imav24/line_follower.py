@@ -175,8 +175,8 @@ class LineFollower(Node):
         #self.colorBajo1 = np.array([110, 255, 255], np.uint8)
         #self.colorAlto1 = np.array([130, 255, 255], np.uint8)
         # Red Color Real Life
-        self.colorBajo1 = np.array([71, 23, 136], np.uint8)
-        self.colorAlto1 = np.array([179, 200, 207], np.uint8)
+        self.colorBajo1 = np.array([100, 80, 0], np.uint8)
+        self.colorAlto1 = np.array([179, 255, 200], np.uint8)
 
         # Second Follower
         self.red_line = red_line_follower
