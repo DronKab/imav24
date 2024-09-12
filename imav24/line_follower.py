@@ -242,7 +242,7 @@ class LineFollower(Node):
             max_angle_error = 30.0
 
             # Line Detection
-            frame = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+            frame = self.cv_bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
             height_scr, width_scr, _ = frame.shape
 
             center_camera_x = width_scr*0.5
@@ -407,7 +407,7 @@ class LineFollower(Node):
             cv2.putText(debug_img, f'LateralError : {min_lateral_error}', (20,40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
 
             # Image Publisher   
-            debug_msg = self.cv_bridge.cv2_to_imgmsg(debug_img, "bgr8")
+            debug_msg = self.cv_bridge.cv2_to_compressed_imgmsg(debug_img, "bgr8")
             self.debug_pub.publish(debug_msg)
 
             # Mostrar la imagen de detección
