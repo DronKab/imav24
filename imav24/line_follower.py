@@ -6,20 +6,21 @@ from cv_bridge import CvBridge
 import time
 from smach import State
 
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CompressedImage
 from geometry_msgs.msg import Twist
 from aruco_opencv_msgs.msg import ArucoDetection
 
 # Code for making the node runnable on Smach
 class ExitOk(Exception): pass
 class NodeState(State):
-    def __init__(self, id=105):
+    def __init__(self, id=105, red_flag=False):
         State.__init__(self, outcomes=["succeeded", "aborted"])
         self.id = id
+        self.red_follower = red_flag
     def execute(self, userdata):
         try:
 
-            node = LineFollower(id_aruco=self.id)
+            node = LineFollower(id_aruco=self.id, line_red_follower=self.red_follower)
 
             rclpy.spin(node)
         except ExitOk:
@@ -46,7 +47,7 @@ class ControlsPID_Indoor():
         Ki_Pitch = 0.000
         Kd_Pitch = 0.000
 
-        Kp_Roll = 0.001
+        Kp_Roll = 0.003
         Ki_Roll = 0.000
         Kd_Roll = 0.000
 
@@ -164,13 +165,28 @@ class ControlsPID_Indoor():
         return inputControl
 
 class LineFollower(Node):
-    def __init__(self, id_aruco=105):
+    def __init__(self, id_aruco=105, red_line_follower=False):
         super().__init__('line_follower')
         self.get_logger().info("Line Follower started.")
 
         # Node Variables 
-        self.colorBajo1 = np.array([110, 255, 255], np.uint8)
-        self.colorAlto1 = np.array([130, 255, 255], np.uint8)
+        # Main Follower
+        # Blue Color in Simulation
+        #self.colorBajo1 = np.array([110, 255, 255], np.uint8)
+        #self.colorAlto1 = np.array([130, 255, 255], np.uint8)
+        # Red Color Real Life
+        self.colorBajo1 = np.array([100, 80, 0], np.uint8)
+        self.colorAlto1 = np.array([179, 255, 200], np.uint8)
+
+        # Second Follower
+        self.red_line = red_line_follower
+        # Red Color in Simulation
+        self.lower_red1 = np.array([0, 50, 50])
+        self.upper_red1 = np.array([10, 255, 255])
+
+        self.lower_red2 = np.array([170, 50, 50])
+        self.upper_red2 = np.array([180, 255, 255])
+
         self.cv_bridge = CvBridge()
 
         self.vels = Twist()
@@ -187,11 +203,11 @@ class LineFollower(Node):
 
         # Subscriptions
         self.aruco_subs = self.create_subscription(ArucoDetection, "/aruco_detections", self.aruco_callback, 10)
-        self.image_sub = self.create_subscription(Image, '/pi_camera/image_raw', self.image_callback, 10)
+        self.image_sub = self.create_subscription(CompressedImage, '/pi_camera/image_raw/compressed', self.image_callback, 10)
         
         # Publishers
         self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
-        self.debug_pub = self.create_publisher(Image, "/line_follower/debug", 10)
+        self.debug_pub = self.create_publisher(CompressedImage, "/line_follower/debug", 10)
         
         # Timer to publish control
         self.ts = 0.07
@@ -208,7 +224,7 @@ class LineFollower(Node):
 
         if self.aruco_flag == 1:
             self.aruco_flag = 0
-            raise ExitOk
+            #raise ExitOk
         else:
 
             start_time = time.time()
@@ -226,20 +242,45 @@ class LineFollower(Node):
             max_angle_error = 30.0
 
             # Line Detection
-            frame = self.cv_bridge.imgmsg_to_cv2(msg, "bgr8")
+            frame = self.cv_bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
             height_scr, width_scr, _ = frame.shape
 
             center_camera_x = width_scr*0.5
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-            speed_coefficient = 1 / width_scr
-            frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
-            mask = frame
-            kernel = np.ones((5, 5), np.uint8) 
-            frame = cv2.dilate(frame, kernel, iterations=0) 
-            mask = frame
+            if self.red_line == True:
+                maskRed1 = cv2.inRange(frame, self.lower_red1, self.upper_red1)
+                maskRed2 = cv2.inRange(frame, self.lower_red2, self.upper_red2)
+                red_frame = maskRed1 | maskRed2
+                kernel = np.ones((5, 5), np.uint8) 
+                red_frame = cv2.dilate(red_frame, kernel, iterations=0)
+                red_mask = red_frame
+                red_debug_img = cv2.cvtColor(red_frame, cv2.COLOR_GRAY2BGR)
+                red_contours, red_hierarchy = cv2.findContours(red_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
-            debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
-            contours, hierarchy = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                if len(red_contours) > 0:
+                    debug_img = red_debug_img
+                    contours = red_contours
+                    mask = red_mask
+                else:
+                    frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
+                    mask = frame
+                    kernel = np.ones((5, 5), np.uint8) 
+                    frame = cv2.dilate(frame, kernel, iterations=0) 
+                    mask = frame
+
+                    debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+                    contours, hierarchy = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+            else:
+                
+                frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
+                mask = frame
+                kernel = np.ones((5, 5), np.uint8) 
+                frame = cv2.dilate(frame, kernel, iterations=0) 
+                mask = frame
+
+                debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+                contours, hierarchy = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
 
             # Mostrar la imagen de la máscara y la imagen dilatada
@@ -346,24 +387,31 @@ class LineFollower(Node):
                     self.vel_pub.publish(self.vels)
                 else:
                     print("NO HAY CONTORNO MINIMO")
-                    cv2.putText(debug_img, 'NO HAY CONTORNO MINIMO', (width_scr/2,height_scr/2+20), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 1)
+                    cv2.putText(debug_img, 'NO HAY CONTORNO MINIMO', (int(width_scr/2),int(height_scr/2+20)), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 1)
                     self.angle_error = 0
                     self.lateral_error = 0    
         
             else:
                 print("NO HAY CONTORNOS")
-                cv2.putText(debug_img, 'NO HAY CONTORNOS', (width_scr/2,height_scr/2), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 1)
+                cv2.putText(debug_img, 'NO HAY CONTORNOS', (int(width_scr/2), int(height_scr/2)), cv2.FONT_HERSHEY_SIMPLEX, 2, (255, 0, 255), 1)
                 self.angle_error = 0
                 self.lateral_error = 0
+                # If thers isn't contours, all velocities are in 0.
+                self.vels.angular.z = 0.0
+                self.vels.linear.x = 0.0
+                self.vels.linear.y = 0.0
+                self.vel_pub.publish(self.vels)
+                
 
             cv2.putText(debug_img, f'AngleError : {min_angle_error}', (20,20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
             cv2.putText(debug_img, f'LateralError : {min_lateral_error}', (20,40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
 
-            debug_msg = self.cv_bridge.cv2_to_imgmsg(debug_img, "bgr8")
+            # Image Publisher   
+            debug_msg = self.cv_bridge.cv2_to_compressed_imgmsg(debug_img, "bgr8")
             self.debug_pub.publish(debug_msg)
 
             # Mostrar la imagen de detección
-            cv2.imshow('Detection', debug_img)
+            #cv2.imshow('Detection', debug_img)
             cv2.waitKey(1)
 
             end_time = time.time()
