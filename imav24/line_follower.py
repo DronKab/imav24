@@ -6,7 +6,7 @@ from cv_bridge import CvBridge
 import time
 from smach import State
 
-from sensor_msgs.msg import CompressedImage
+from sensor_msgs.msg import CompressedImage, Image
 from geometry_msgs.msg import Twist
 from aruco_opencv_msgs.msg import ArucoDetection
 
@@ -20,13 +20,14 @@ class NodeState(State):
     def execute(self, userdata):
         try:
 
-            node = LineFollower(id_aruco=self.id, line_red_follower=self.red_follower)
+            node = LineFollower(id_aruco=self.id, red_line_follower=self.red_follower)
 
             rclpy.spin(node)
         except ExitOk:
             node.destroy_node()
             return "succeeded"
-        except:
+        except Exception as e:
+            print(e)
             return "aborted"
 
 class ControlsPID_Indoor():
@@ -203,11 +204,11 @@ class LineFollower(Node):
 
         # Subscriptions
         self.aruco_subs = self.create_subscription(ArucoDetection, "/aruco_detections", self.aruco_callback, 10)
-        self.image_sub = self.create_subscription(CompressedImage, '/pi_camera/image_raw/compressed', self.image_callback, 10)
+        self.image_sub = self.create_subscription(Image, '/pi_camera/image_raw', self.image_callback, 10)
         
         # Publishers
         self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
-        self.debug_pub = self.create_publisher(CompressedImage, "/line_follower/debug", 10)
+        self.debug_pub = self.create_publisher(Image, "/line_follower/debug", 10)
         
         # Timer to publish control
         self.ts = 0.07
@@ -242,7 +243,7 @@ class LineFollower(Node):
             max_angle_error = 30.0
 
             # Line Detection
-            frame = self.cv_bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
+            frame = self.cv_bridge.imgmsg_to_cv2(msg)
             height_scr, width_scr, _ = frame.shape
 
             center_camera_x = width_scr*0.5
@@ -264,8 +265,19 @@ class LineFollower(Node):
                 else:
                     frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
                     mask = frame
+                    small_kernel = np.ones((3, 3), np.uint8)  # Para eliminar ruido pequeño
+                    large_kernel = np.ones((7, 7), np.uint8)  # Para eliminar ruido grande
+                    dilate_kernel = np.ones((5, 5), np.uint8)  # Kernel intermedio para dilatación
+                    frame = cv2.erode(frame, small_kernel, iterations=1)
+                    frame = cv2.erode(frame, large_kernel, iterations=1)
+                    frame = cv2.GaussianBlur(frame, (5, 5), 0)
                     kernel = np.ones((5, 5), np.uint8) 
-                    frame = cv2.dilate(frame, kernel, iterations=0) 
+                    frame = cv2.dilate(frame, dilate_kernel, iterations=1) 
+                    # Aplicar operación de apertura (erosión seguida de dilatación) si quieres eliminar ruido puntual
+                    frame = cv2.morphologyEx(frame, cv2.MORPH_OPEN, kernel)
+
+                    # Aplicar operación de cierre (dilatación seguida de erosión) si deseas cerrar pequeños agujeros en los objetos detectados
+                    frame = cv2.morphologyEx(frame, cv2.MORPH_CLOSE, kernel) 
                     mask = frame
 
                     debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
@@ -275,8 +287,19 @@ class LineFollower(Node):
                 
                 frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
                 mask = frame
+                small_kernel = np.ones((3, 3), np.uint8)  # Para eliminar ruido pequeño
+                large_kernel = np.ones((7, 7), np.uint8)  # Para eliminar ruido grande
+                dilate_kernel = np.ones((5, 5), np.uint8)  # Kernel intermedio para dilatación
+                frame = cv2.erode(frame, small_kernel, iterations=1)
+                frame = cv2.erode(frame, large_kernel, iterations=1)
+                frame = cv2.GaussianBlur(frame, (5, 5), 0)
                 kernel = np.ones((5, 5), np.uint8) 
-                frame = cv2.dilate(frame, kernel, iterations=0) 
+                frame = cv2.dilate(frame, dilate_kernel, iterations=1)
+                # Aplicar operación de apertura (erosión seguida de dilatación) si quieres eliminar ruido puntual
+                frame = cv2.morphologyEx(frame, cv2.MORPH_OPEN, kernel)
+
+                # Aplicar operación de cierre (dilatación seguida de erosión) si deseas cerrar pequeños agujeros en los objetos detectados
+                frame = cv2.morphologyEx(frame, cv2.MORPH_CLOSE, kernel) 
                 mask = frame
 
                 debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
@@ -406,8 +429,9 @@ class LineFollower(Node):
             cv2.putText(debug_img, f'AngleError : {min_angle_error}', (20,20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
             cv2.putText(debug_img, f'LateralError : {min_lateral_error}', (20,40), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
 
-            # Image Publisher   
-            debug_msg = self.cv_bridge.cv2_to_compressed_imgmsg(debug_img, "bgr8")
+            # Image Publisher  
+            resized_image = cv2.resize(debug_img, (200, 100), interpolation=cv2.INTER_LINEAR)
+            debug_msg = self.cv_bridge.cv2_to_imgmsg(resized_image)
             self.debug_pub.publish(debug_msg)
 
             # Mostrar la imagen de detección
@@ -428,4 +452,7 @@ def main(args=None):
     rclpy.shutdown()
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except Exception as e:
+        print(e)
