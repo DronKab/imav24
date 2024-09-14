@@ -13,6 +13,7 @@ echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
  - Last version of setuptools working without warning on Ros2 Humble : 
 
 ```sh
+sudo apt install python3-pip
 pip install setuptools==58.2.0
 ```
 
