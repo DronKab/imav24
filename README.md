@@ -45,9 +45,9 @@ sudo apt-get install ros-humble-smach-ros
 Package documentation on this *[tutorials page](https://wiki.ros.org/smach/Tutorials)* page
 - Video for Linux 2 package (for transmiting camera image on raspberrypi)
 ```sh
-sudo apt-get install ros-humble-usb-cam
+sudo apt-get install ros-${ROS_DISTRO}-v4l2-camera
 ```
-Package based on this *[GitHub page](https://github.com/ros-drivers/usb_cam)
+Package based on this *[GitHub page](https://gitlab.com/boldhearts/ros2_v4l2_camera)
 
 ## Installation
 
