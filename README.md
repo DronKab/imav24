@@ -5,6 +5,10 @@ Indoor and outdoor ROS2 nodes for IMAV24.
 ## Pre-requisites
 
  - ROS2 Humble installed. Steps can be found *[here](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html)*.
+ - After install ROS2 Humble, source it with
+```sh
+echo "source /opt/ros/humble/setup.bash" >> ~/.bashrc
+ ```
 
  - Last version of setuptools working without warning on Ros2 Humble : 
 
@@ -34,6 +38,16 @@ sudo ldconfig /usr/local/lib/
   ```
 
   Package *[page](https://index.ros.org/p/aruco_opencv/)* on ROS Index is provided as reference.
+  - Smach package:
+```sh
+sudo apt-get install ros-humble-smach-ros
+```
+Package documentation on this *[tutorials page](https://wiki.ros.org/smach/Tutorials)* page
+- Video for Linux 2 package (for transmiting camera image on raspberrypi)
+```sh
+sudo apt-get install ros-humble-usb-cam
+```
+Package based on this *[GitHub page](https://github.com/ros-drivers/usb_cam)
 
 ## Installation
 
