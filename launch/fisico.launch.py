@@ -31,7 +31,7 @@ def generate_launch_description():
                 ("__ns","/pi_camera")
             ],
             parameters=[{
-                "video_device":"/dev/video2"
+                "video_device":"/dev/video1"
             }]
         ),
         Node(
