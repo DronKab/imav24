@@ -175,18 +175,26 @@ class LineFollower(Node):
         # Blue Color in Simulation
         #self.colorBajo1 = np.array([110, 255, 255], np.uint8)
         #self.colorAlto1 = np.array([130, 255, 255], np.uint8)
+
+        # Blue Color Real Life
+        self.colorBajo1 = np.array([88, 86, 96], np.uint8)
+        self.colorAlto1 = np.array([105, 209, 151], np.uint8)
+
         # Red Color Real Life
-        self.colorBajo1 = np.array([100, 80, 0], np.uint8)
-        self.colorAlto1 = np.array([179, 255, 200], np.uint8)
+        self.lower_red1 = np.array([0, 64, 100])
+        self.upper_red1 = np.array([16, 221, 166])
+
+        self.lower_red2 = np.array([168, 64, 100])
+        self.upper_red2 = np.array([180, 221, 166])
 
         # Second Follower
         self.red_line = red_line_follower
         # Red Color in Simulation
-        self.lower_red1 = np.array([0, 50, 50])
-        self.upper_red1 = np.array([10, 255, 255])
+        #self.lower_red1 = np.array([0, 50, 50])
+        #self.upper_red1 = np.array([10, 255, 255])
 
-        self.lower_red2 = np.array([170, 50, 50])
-        self.upper_red2 = np.array([180, 255, 255])
+        #self.lower_red2 = np.array([170, 50, 50])
+        #self.upper_red2 = np.array([180, 255, 255])
 
         self.cv_bridge = CvBridge()
 
@@ -204,11 +212,11 @@ class LineFollower(Node):
 
         # Subscriptions
         self.aruco_subs = self.create_subscription(ArucoDetection, "/aruco_detections", self.aruco_callback, 10)
-        self.image_sub = self.create_subscription(Image, '/pi_camera/image_raw', self.image_callback, 10)
+        self.image_sub = self.create_subscription(CompressedImage, '/pi_camera/image_raw/compressed', self.image_callback, 10)
         
         # Publishers
         self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
-        self.debug_pub = self.create_publisher(Image, "/line_follower/debug", 10)
+        self.debug_pub = self.create_publisher(CompressedImage, "/line_follower/debug", 10)
         
         # Timer to publish control
         self.ts = 0.07
@@ -243,17 +251,25 @@ class LineFollower(Node):
             max_angle_error = 30.0
 
             # Line Detection
-            frame = self.cv_bridge.imgmsg_to_cv2(msg)
+            frame = self.cv_bridge.compressed_imgmsg_to_cv2(msg)
             height_scr, width_scr, _ = frame.shape
+            center_camera_x = width_scr * 0.5
+            center_camera_y = height_scr * 0.5
 
-            center_camera_x = width_scr*0.5
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            cv2.line(frame, (int(center_camera_x + 40), 0), (int(center_camera_x + 40), height_scr), (0, 0, 0), 10)
+            cv2.line(frame, (int(center_camera_x - 40), 0), (int(center_camera_x - 40), height_scr), (0, 0, 0), 10)
+
+            cv2.line(frame, (0, int(center_camera_y + 40)), (width_scr, int(center_camera_y + 40)), (0, 0, 0), 10)
+            cv2.line(frame, (0, int(center_camera_y - 40)), (width_scr, int(center_camera_y - 40)), (0, 0, 0), 10)
             if self.red_line == True:
                 maskRed1 = cv2.inRange(frame, self.lower_red1, self.upper_red1)
                 maskRed2 = cv2.inRange(frame, self.lower_red2, self.upper_red2)
                 red_frame = maskRed1 | maskRed2
-                kernel = np.ones((5, 5), np.uint8) 
-                red_frame = cv2.dilate(red_frame, kernel, iterations=0)
+                red_frame = cv2.GaussianBlur(red_frame, (5, 5), 0)
+                red_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                red_frame = cv2.morphologyEx(red_frame, cv2.MORPH_OPEN, red_kernel)
+                red_frame = cv2.morphologyEx(red_frame, cv2.MORPH_CLOSE, red_kernel) 
                 red_mask = red_frame
                 red_debug_img = cv2.cvtColor(red_frame, cv2.COLOR_GRAY2BGR)
                 red_contours, red_hierarchy = cv2.findContours(red_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
@@ -265,14 +281,8 @@ class LineFollower(Node):
                 else:
                     frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
                     mask = frame
-                    small_kernel = np.ones((3, 3), np.uint8)  # Para eliminar ruido pequeño
-                    large_kernel = np.ones((7, 7), np.uint8)  # Para eliminar ruido grande
-                    dilate_kernel = np.ones((5, 5), np.uint8)  # Kernel intermedio para dilatación
-                    frame = cv2.erode(frame, small_kernel, iterations=1)
-                    frame = cv2.erode(frame, large_kernel, iterations=1)
                     frame = cv2.GaussianBlur(frame, (5, 5), 0)
-                    kernel = np.ones((5, 5), np.uint8) 
-                    frame = cv2.dilate(frame, dilate_kernel, iterations=1) 
+                    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
                     # Aplicar operación de apertura (erosión seguida de dilatación) si quieres eliminar ruido puntual
                     frame = cv2.morphologyEx(frame, cv2.MORPH_OPEN, kernel)
 
@@ -287,14 +297,8 @@ class LineFollower(Node):
                 
                 frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
                 mask = frame
-                small_kernel = np.ones((3, 3), np.uint8)  # Para eliminar ruido pequeño
-                large_kernel = np.ones((7, 7), np.uint8)  # Para eliminar ruido grande
-                dilate_kernel = np.ones((5, 5), np.uint8)  # Kernel intermedio para dilatación
-                frame = cv2.erode(frame, small_kernel, iterations=1)
-                frame = cv2.erode(frame, large_kernel, iterations=1)
                 frame = cv2.GaussianBlur(frame, (5, 5), 0)
-                kernel = np.ones((5, 5), np.uint8) 
-                frame = cv2.dilate(frame, dilate_kernel, iterations=1)
+                kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
                 # Aplicar operación de apertura (erosión seguida de dilatación) si quieres eliminar ruido puntual
                 frame = cv2.morphologyEx(frame, cv2.MORPH_OPEN, kernel)
 
@@ -305,10 +309,6 @@ class LineFollower(Node):
                 debug_img = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
                 contours, hierarchy = cv2.findContours(frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
-
-            # Mostrar la imagen de la máscara y la imagen dilatada
-            #cv2.imshow('Mask', frame_mask)
-            #cv2.imshow('Dilated Mask', frame_mask_dilated)
 
             if len(contours)>0:
                 for contour in contours:
@@ -431,7 +431,7 @@ class LineFollower(Node):
 
             # Image Publisher  
             resized_image = cv2.resize(debug_img, (200, 100), interpolation=cv2.INTER_LINEAR)
-            debug_msg = self.cv_bridge.cv2_to_imgmsg(resized_image)
+            debug_msg = self.cv_bridge.cv2_to_compressed_imgmsg(resized_image)
             self.debug_pub.publish(debug_msg)
 
             # Mostrar la imagen de detección
