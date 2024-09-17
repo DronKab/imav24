@@ -29,7 +29,7 @@ def generate_launch_description():
             output="screen",
             remappings=[
                 ("__ns","/pi_camera")
-            ]
+            ],
             parameters=[{
                 "video_device":"/dev/video2"
             }]
