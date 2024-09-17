@@ -20,7 +20,7 @@ def generate_launch_description():
             parameters=[{
                 "cam_base_topic":"/pi_camera/image_raw",
                 "marker_dict":"5X5_1000",
-                "image_sub_compressed":"true"
+                "image_sub_compressed": True
             }]
         ),
         Node(

@@ -216,7 +216,7 @@ class LineFollower(Node):
         
         # Publishers
         self.vel_pub = self.create_publisher(Twist, "/px4_driver/cmd_vel", 10)
-        self.debug_pub = self.create_publisher(CompressedImage, "/line_follower/debug", 10)
+        self.debug_pub = self.create_publisher(CompressedImage, "/line_follower/debug/compressed", 10)
         
         # Timer to publish control
         self.ts = 0.07
