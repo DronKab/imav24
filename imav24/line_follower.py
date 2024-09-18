@@ -40,15 +40,15 @@ class ControlsPID_Indoor():
         self.signPitch = 0
         self.signRoll = 0
 
-        Kp_Yaw = 0.050
-        Ki_Yaw = 0.001
-        Kd_Yaw = 0.007
+        Kp_Yaw = 0.020
+        Ki_Yaw = 0.0005
+        Kd_Yaw = 0.003
 
         Kp_Pitch = 0.000
         Ki_Pitch = 0.000
         Kd_Pitch = 0.000
 
-        Kp_Roll = 0.003
+        Kp_Roll = 0.001
         Ki_Roll = 0.000
         Kd_Roll = 0.000
 
@@ -221,6 +221,9 @@ class LineFollower(Node):
         # Timer to publish control
         self.ts = 0.07
 
+        # Flag from Red to Blue
+        self.turn_in_red_line = False
+
     def aruco_callback(self, msg):
         if len(msg.markers) > 0:
             for i in range (0, len(msg.markers)):
@@ -233,7 +236,7 @@ class LineFollower(Node):
 
         if self.aruco_flag == 1:
             self.aruco_flag = 0
-            #raise ExitOk
+            raise ExitOk
         else:
 
             start_time = time.time()
@@ -262,6 +265,24 @@ class LineFollower(Node):
 
             cv2.line(frame, (0, int(center_camera_y + 40)), (width_scr, int(center_camera_y + 40)), (0, 0, 0), 10)
             cv2.line(frame, (0, int(center_camera_y - 40)), (width_scr, int(center_camera_y - 40)), (0, 0, 0), 10)
+
+            if self.turn_in_red_line == True:
+                blue_frame = cv2.inRange(frame, self.colorBajo1, self.colorAlto1)
+                blue_mask = blue_frame
+                blue_frame = cv2.GaussianBlur(blue_frame, (5, 5), 0)
+                blue_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5))
+                # Aplicar operación de apertura (erosión seguida de dilatación) si quieres eliminar ruido puntual
+                blue_frame = cv2.morphologyEx(blue_frame, cv2.MORPH_OPEN, blue_kernel)
+
+                # Aplicar operación de cierre (dilatación seguida de erosión) si deseas cerrar pequeños agujeros en los objetos detectados
+                blue_frame = cv2.morphologyEx(blue_frame, cv2.MORPH_CLOSE, blue_kernel) 
+                blue_mask = blue_frame
+                blue_debug_img = cv2.cvtColor(blue_frame, cv2.COLOR_GRAY2BGR)
+                blue_contours, blue_hierarchy = cv2.findContours(blue_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+
+                if len(blue_contours) > 0:
+                    raise ExitOk
+
             if self.red_line == True:
                 maskRed1 = cv2.inRange(frame, self.lower_red1, self.upper_red1)
                 maskRed2 = cv2.inRange(frame, self.lower_red2, self.upper_red2)
@@ -380,15 +401,17 @@ class LineFollower(Node):
                             self.vels.angular.z = 1.0
                         else:
                             print("TURN LEFT")
+                            if self.red_line == True:
+                                self.turn_in_red_line = True
                             cv2.putText(debug_img, 'Turn Left', (20, 100), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
                             self.angle_error = 0
                             self.vels.angular.z = -1.0
 
-                        self.vels.linear.x = 0.3
+                        self.vels.linear.x = 0.1
                         self.vels.linear.y = 0.0
                     else:
                         self.control_flag = 1
-                        self.vels.linear.x = 0.5
+                        self.vels.linear.x = 0.3
                         self.vels.linear.y = float(self.Control.ControlPID_roll(0, self.lateral_error, 1, 0))
                         self.vels.angular.z = float(self.Control.ControlPID_yaw(0, self.angle_error, 1, 0))
 

@@ -35,7 +35,7 @@ class ArucoControl(Node):
         super().__init__("aruco_control")
         self.get_logger().info("Started Aruco Control ...")
 
-        self.max_vel = 4.0
+        self.max_vel = 0.5
         self.max_vel_z = -0.1
         self.max_vel_yaw = 10.0
 
@@ -54,19 +54,11 @@ class ArucoControl(Node):
 
         self.lim_sup_x = 0.1
         self.lim_sup_y = 0.1
-        self.lim_sup_yaw = 10
-
-        if self.aruco_goal == 300 or self.aruco_goal == 301 or self.aruco_goal == 302: # or self.aruco_goal == 400:
-            self.lim_z = 0.5
-            self.lim_inf_x = 0.05
-            self.lim_inf_y = 0.05
-            self.lim_inf_yaw = 5
-
-        else:
-            self.lim_z = 0.3
-            self.lim_inf_x = 0.01
-            self.lim_inf_y = 0.01
-            self.lim_inf_yaw = 2
+        self.lim_sup_yaw = 15
+        self.lim_inf_yaw = 10
+        self.lim_z = 0.5
+        self.lim_inf_x = 0.05
+        self.lim_inf_y = 0.05
 
         self.aruco_sub = self.create_subscription(ArucoDetection, "/aruco_detections", self.aruco_callback, 10)
 
@@ -81,39 +73,24 @@ class ArucoControl(Node):
             self.declare_parameter("do_height_control", True)
         
         # X variables
-        self.px_gain = 0.9
-        self.dx_gain = 0.1
-        self.nx_filter = 0.1
+        self.px_gain = 0.3
+        self.dx_gain = 0.03
+        self.nx_filter = 0.03
 
         # Y variables
-        self.py_gain = 0.9
-        self.dy_gain = 0.1
-        self.ny_filter = 0.1
+        self.py_gain = 0.3
+        self.dy_gain = 0.03
+        self.ny_filter = 0.03
 
         # Z variables
-        self.pz_gain = 0.6
-        self.dz_gain = 0.1
+        self.pz_gain = 0.2
+        self.dz_gain = 0.03
         self.nz_filter = 0.1
 
         # Yaw variables
-        if self.aruco_goal == 400:
-            self.pyaw_gain = 0.005
         self.pyaw_gain = 0.01
         # self.dyaw_gain = 0.00
         # self.nyaw_filter = 0.0
-        
-        self.get_logger().info(f"PX Gain : {self.px_gain}")
-        self.get_logger().info(f"DX Gain : {self.dx_gain}")
-        self.get_logger().info(f"NX Coefficient : {self.nx_filter}")
-        self.get_logger().info(f"PY Gain : {self.py_gain}")
-        self.get_logger().info(f"DY Gain : {self.dy_gain}")
-        self.get_logger().info(f"NY Coefficient : {self.ny_filter}")
-        self.get_logger().info(f"PZ Gain : {self.pz_gain}")
-        self.get_logger().info(f"DZ Gain : {self.dz_gain}")
-        self.get_logger().info(f"NZ Coefficient : {self.nz_filter}")
-        self.get_logger().info(f"PYaw Gain : {self.pyaw_gain}")
-        # self.get_logger().info(f"DYaw Gain : {self.dyaw_gain}")
-        # self.get_logger().info(f"NYaw Coefficient : {self.nyaw_filter}")
         
         self.q1 = Quaternion()
         self.x_error = 0.10
