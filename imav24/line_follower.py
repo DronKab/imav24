@@ -281,6 +281,15 @@ class LineFollower(Node):
                 blue_contours, blue_hierarchy = cv2.findContours(blue_frame, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
 
                 if len(blue_contours) > 0:
+                    self.vels.angular.z = 0.5
+                    self.vels.linear.x = 0.0
+                    self.vels.linear.y = 0.0
+                    self.vel_pub.publish(self.vels)
+                    time.sleep(0.1)
+                    self.vel_pub.publish(self.vels)
+                    time.sleep(0.1)
+                    self.vel_pub.publish(self.vels)
+                    time.sleep(0.1)
                     raise ExitOk
 
             if self.red_line == True:

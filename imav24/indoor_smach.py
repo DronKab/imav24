@@ -51,24 +51,9 @@ class IndoorSmach(Node):
             smach.Sequence.add("STATE ARUCO_302", aruco_control.NodeState(302, 0.0, 0.0, 180, 0))
             smach.Sequence.add("STATE LINE_400", line_follower.NodeState(400, False))
             smach.Sequence.add("HEIGHT_2_WINDOW", smach.CBState(self.control_height, input_keys=["altura"], cb_args=[1.0], outcomes=["succeeded"]))
-            # smach.Sequence.add("STATE LINE_BLUE", line_follower.NodeState(300, False))
-            # smach.Sequence.add("STATE LINE_RED", line_follower.NodeState(300, False))
-            smach.Sequence.add("STATE LINE_100", line_follower.NodeState(100, True))
+            smach.Sequence.add("STATE LINE_BLUE_RED", line_follower.NodeState(300, True))
+            smach.Sequence.add("STATE LINE_RED_BLUE", line_follower.NodeState(100, False))
             smach.Sequence.add("STATE ARUCO_100", aruco_control.NodeState(100, 0.0, 0.0, 180, 1))
-
-            # smach.Sequence.add("STATE LINE_400", line_follower.NodeState(400, False))
-            # smach.Sequence.add("STATE ARUCO_400", aruco_control.NodeState(400, 0.4, 0.0, 0, 1))
-            # smach.Sequence.add("DELAY_pick_cone", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
-            # nodo toma el cono
-            # smach.Sequence.add("CONE TAKEOFF 1", smach.CBState(self.takeoff, outcomes=["succeeded"])
-            
-            # smach.Sequence.add("DELAY_height_ctrl_4", smach.CBState(self.delay, input_keys=["secs"], cb_args=[5], outcomes=["succeeded"]))
-            # smach.Sequence.add("STATE LINE_405", line_follower.NodeState(405, False))
-            # smach.Sequence.add("STATE ARUCO_405", aruco_control.NodeState(405, 0.0, 0.0, 180, 0))
-            # smach.Sequence.add("DELAY_drope_cone", smach.CBState(self.delay, input_keys=["secs"], cb_args=[10], outcomes=["succeeded"]))
-            # nodo suelta cono
-
-            
 
         # Start server for state machine visualization
         server = smach_ros.IntrospectionServer('indoor_smach_server', sq, '/SM_ROOT')
